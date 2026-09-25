@@ -52,6 +52,10 @@ class EquipmentController extends Controller
 
     public function destroy(Equipment $equipment)
     {
+        if ($equipment->maintenanceRecords()->exists()) {
+            return redirect()->route('equipment.index')->with('error', 'This equipment has maintenance history and cannot be deleted.');
+        }
+
         $equipment->delete();
 
         return redirect()->route('equipment.index')->with('success', 'Equipment removed.');

@@ -27,8 +27,8 @@ class DashboardController extends Controller
             'equipment_needing_repair' => Equipment::where('status', 'needs_repair')->count(),
         ];
 
-        $recentPayments = Payment::with('membership')->latest('payment_date')->take(5)->get();
-        $expiringSoon = Membership::where('status', 'active')
+        $recentPayments = Payment::with('membership.member')->latest('payment_date')->take(5)->get();
+        $expiringSoon = Membership::with('member')->where('status', 'active')
             ->whereBetween('end_date', [today(), today()->addDays(7)])
             ->get();
 

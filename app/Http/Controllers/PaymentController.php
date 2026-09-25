@@ -9,7 +9,7 @@ class PaymentController extends Controller
 {
     public function index(Request $request)
     {
-        $payments = Payment::with('membership')
+        $payments = Payment::with('membership.member')
             ->when($request->date, fn ($q, $date) => $q->whereDate('payment_date', $date))
             ->latest('payment_date')
             ->paginate(15)

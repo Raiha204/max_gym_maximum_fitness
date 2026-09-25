@@ -73,6 +73,12 @@
                 </div>
             @endif
 
+            @if (session('error'))
+                <div class="mb-4 px-4 py-3 rounded bg-red-50 text-red-800 border-l-4 border-gym-red text-sm">
+                    {{ session('error') }}
+                </div>
+            @endif
+
             @if ($errors->any())
                 <div class="mb-4 px-4 py-3 rounded bg-red-50 border-l-4 border-gym-red text-sm text-gym-redDark">
                     <ul class="list-disc list-inside">

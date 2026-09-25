@@ -8,12 +8,24 @@
         <div class="grid grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-semibold mb-1">First Name</label>
-                <input type="text" name="first_name" value="{{ old('first_name', $membership->first_name) }}" required
+                <input type="text" name="first_name" value="{{ old('first_name', $membership->member->first_name) }}" required
                        class="w-full border border-gray-300 rounded px-3 py-2">
             </div>
             <div>
                 <label class="block text-sm font-semibold mb-1">Last Name</label>
-                <input type="text" name="last_name" value="{{ old('last_name', $membership->last_name) }}" required
+                <input type="text" name="last_name" value="{{ old('last_name', $membership->member->last_name) }}" required
+                       class="w-full border border-gray-300 rounded px-3 py-2">
+            </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-semibold mb-1">Phone (optional)</label>
+                <input type="text" name="phone" value="{{ old('phone', $membership->member->phone) }}"
+                       class="w-full border border-gray-300 rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold mb-1">Email (optional)</label>
+                <input type="email" name="email" value="{{ old('email', $membership->member->email) }}"
                        class="w-full border border-gray-300 rounded px-3 py-2">
             </div>
         </div>

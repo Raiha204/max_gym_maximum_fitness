@@ -18,6 +18,7 @@
         <thead class="bg-black text-white uppercase text-xs">
             <tr>
                 <th class="text-left px-5 py-3">Name</th>
+                <th class="text-left px-5 py-3">Member ID / Barcode</th>
                 <th class="text-left px-5 py-3">Type</th>
                 <th class="text-right px-5 py-3">Due</th>
                 <th class="text-right px-5 py-3">Paid</th>
@@ -32,6 +33,7 @@
             @forelse ($memberships as $m)
                 <tr class="border-t hover:bg-gray-50">
                     <td class="px-5 py-3 font-medium">{{ $m->fullName() }}</td>
+                    <td class="px-5 py-3 font-mono text-xs tracking-wide">{{ $m->member->member_number }}</td>
                     <td class="px-5 py-3">
                         <span class="px-2 py-1 rounded text-xs font-semibold {{ $m->member_type === 'regular' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700' }}">
                             {{ ucfirst($m->member_type) }}
@@ -83,7 +85,7 @@
                 </tr>
                 @if ($m->balance > 0)
                     <tr id="pay-{{ $m->id }}" class="hidden bg-gray-50 border-t">
-                        <td colspan="9" class="px-5 py-3">
+                        <td colspan="10" class="px-5 py-3">
                             <form method="POST" action="{{ route('memberships.pay', $m) }}" class="flex items-end gap-3">
                                 @csrf
                                 <div>
@@ -105,7 +107,7 @@
                     </tr>
                 @endif
             @empty
-                <tr><td colspan="9" class="px-5 py-6 text-center text-gray-400">No members registered yet.</td></tr>
+                <tr><td colspan="10" class="px-5 py-6 text-center text-gray-400">No members registered yet.</td></tr>
             @endforelse
         </tbody>
     </table>

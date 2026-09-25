@@ -10,14 +10,16 @@ class AttendanceController extends Controller
 {
     public function index(Request $request)
     {
-        $attendances = Attendance::with('membership')
+        $attendances = Attendance::with('membership.member')
             ->when($request->date, fn ($q, $date) => $q->whereDate('attendance_date', $date))
             ->latest('attendance_date')
             ->latest('check_in')
             ->paginate(15)
             ->withQueryString();
 
-        $memberships = Membership::orderBy('first_name')->get();
+        $memberships = Membership::with('member')->get()
+            ->sortBy(fn (Membership $membership) => $membership->member?->first_name)
+            ->values();
 
         return view('attendance.index', compact('attendances', 'memberships'));
     }

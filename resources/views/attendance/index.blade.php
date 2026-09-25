@@ -10,7 +10,7 @@
             <select name="membership_id" required class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
                 <option value="">Select member...</option>
                 @foreach ($memberships as $m)
-                    <option value="{{ $m->id }}">{{ $m->fullName() }}</option>
+                    <option value="{{ $m->id }}">{{ $m->member->member_number }} — {{ $m->fullName() }}</option>
                 @endforeach
             </select>
             <button class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded font-semibold text-sm">Record Check-In</button>

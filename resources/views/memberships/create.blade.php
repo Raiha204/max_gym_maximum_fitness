@@ -17,6 +17,18 @@
                        class="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-red-600 focus:outline-none">
             </div>
         </div>
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-semibold mb-1">Phone (optional)</label>
+                <input type="text" name="phone" value="{{ old('phone') }}"
+                       class="w-full border border-gray-300 rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold mb-1">Email (optional)</label>
+                <input type="email" name="email" value="{{ old('email') }}"
+                       class="w-full border border-gray-300 rounded px-3 py-2">
+            </div>
+        </div>
         <div>
             <label class="block text-sm font-semibold mb-1">Member Type</label>
             <div class="grid grid-cols-2 gap-3">
