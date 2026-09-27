@@ -23,7 +23,7 @@ class Member extends Model
             if (! $member->member_number) {
                 // A temporary unique value satisfies the database constraint;
                 // the created hook replaces it with the sequential member ID.
-                $member->member_number = 'MAX-TMP-'.Str::ulid();
+                $member->member_number = 'MAX-TMP-'.substr((string) Str::ulid(), 0, 23);
             }
         });
 
