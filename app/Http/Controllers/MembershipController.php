@@ -3,8 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Membership;
-use App\Models\Member;
 use App\Models\Payment;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -12,26 +12,37 @@ class MembershipController extends Controller
 {
     public function index(Request $request)
     {
-        $memberships = Membership::with('member')
-            ->when($request->search, function ($q, $search) {
-                $q->whereHas('member', function ($memberQuery) use ($search) {
-                    $memberQuery->where('first_name', 'like', "%{$search}%")
-                        ->orWhere('last_name', 'like', "%{$search}%")
-                        ->orWhere('member_number', 'like', "%{$search}%");
-                });
-            })
-            ->latest()
-            ->paginate(10)
-            ->withQueryString();
+        $search = trim((string) $request->query('search', ''));
+        $statusFilter = (string) $request->query('status', 'all');
 
-        // Lazily catch anyone who has passed their payment due date without
-        // paying in full, same pattern as the pending → expired status check.
-        foreach ($memberships as $membership) {
-            $membership->applyLatePenaltyIfNeeded();
-            $membership->refreshStatus();
+        $query = Membership::query()->latest();
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('full_name', 'like', "%{$search}%")
+                  ->orWhere('member_id', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('phone', 'like', "%{$search}%");
+            });
         }
 
-        return view('memberships.index', compact('memberships'));
+        $allMemberships = $query->get();
+
+        $counts = [
+            'all' => $allMemberships->count(),
+            'active' => $allMemberships->where('membership_status', 'Active')->count(),
+            'expiring' => $allMemberships->where('display_status', 'expiring')->count(),
+            'expired' => $allMemberships->where('membership_status', 'Expired')->count(),
+        ];
+
+        $memberships = $allMemberships->filter(function (Membership $m) use ($statusFilter) {
+            if ($statusFilter === 'active') return $m->membership_status === 'Active';
+            if ($statusFilter === 'expiring') return $m->display_status === 'expiring';
+            if ($statusFilter === 'expired') return $m->membership_status === 'Expired';
+            return true;
+        });
+
+        return view('memberships.index', compact('memberships', 'search', 'statusFilter', 'counts'));
     }
 
     public function create()
@@ -41,51 +52,71 @@ class MembershipController extends Controller
 
     public function store(Request $request)
     {
-        $data = $request->validate([
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:32'],
-            'member_type' => ['required', 'in:regular,student'],
-            'amount_paid' => ['nullable', 'numeric', 'min:0'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+        $validated = $request->validate([
+            'full_name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255'],
+            'phone' => ['required', 'string', 'max:50'],
+            'gender' => ['required', 'in:Male,Female,Other'],
+            'date_of_birth' => ['required', 'date'],
+            'photo' => ['nullable', 'image', 'max:4096'],
+            'plan_type' => ['required', 'in:Student Membership,Regular Membership'],
+            'duration_months' => ['required', 'integer', 'in:1,2,3,6,12'],
+            'payment_method' => ['required', 'in:Cash,GCash'],
         ]);
 
-        // Price always comes from the fixed price list, never from user input,
-        // so the cashier never has to type (or mistype) an amount.
-        $membership = DB::transaction(function () use ($data) {
-            $member = Member::create([
-                'first_name' => $data['first_name'],
-                'last_name' => $data['last_name'],
-                'email' => $data['email'] ?? null,
-                'phone' => $data['phone'] ?? null,
+        $monthlyRate = Membership::PLAN_RATES[$validated['plan_type']] ?? 750;
+        $duration = (int) $validated['duration_months'];
+        $totalAmount = $monthlyRate * $duration;
+
+        $startDate = Carbon::today();
+        $endDate = $startDate->copy()->addMonths($duration);
+
+        $photoPath = null;
+        if ($request->hasFile('photo')) {
+            $photoPath = $request->file('photo')->store('members', 'public');
+        }
+
+        $membership = DB::transaction(function () use ($validated, $monthlyRate, $duration, $totalAmount, $startDate, $endDate, $photoPath) {
+            $member = Membership::create([
+                'member_id' => Membership::generateMemberId(),
+                'full_name' => $validated['full_name'],
+                'email' => $validated['email'],
+                'phone' => $validated['phone'],
+                'gender' => $validated['gender'],
+                'date_of_birth' => $validated['date_of_birth'],
+                'photo_path' => $photoPath,
+                'plan_type' => $validated['plan_type'],
+                'duration_months' => $duration,
+                'monthly_rate' => $monthlyRate,
+                'total_amount' => $totalAmount,
+                'payment_method' => $validated['payment_method'],
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'status' => 'Active',
             ]);
 
-            unset($data['first_name'], $data['last_name'], $data['email'], $data['phone']);
-            $data['member_id'] = $member->id;
-            $data['amount_due'] = Membership::PRICES[$data['member_type']];
-            $data['plan_name'] = ucfirst($data['member_type']).' Monthly';
-            $data['amount_paid'] = min($data['amount_paid'] ?? 0, $data['amount_due']);
-            $data['payment_due_date'] = now()->addDay()->toDateString();
+            Payment::create([
+                'membership_id' => $member->id,
+                'payer_name' => $member->full_name,
+                'category' => 'Membership Registration',
+                'plan_label' => "{$member->plan_type} ({$duration} " . ($duration === 1 ? 'Month' : 'Months') . ")",
+                'amount' => $totalAmount,
+                'payment_method' => $validated['payment_method'],
+                'paid_at' => now(),
+            ]);
 
-            $membership = Membership::create($data);
-            $membership->refreshStatus();
-
-            if ($membership->amount_paid > 0) {
-                Payment::create([
-                    'membership_id' => $membership->id,
-                    'payment_date' => now()->toDateString(),
-                    'amount' => $membership->amount_paid,
-                    'payment_method' => 'cash',
-                    'status' => 'completed',
-                ]);
-            }
-
-            return $membership;
+            return $member;
         });
 
-        return redirect()->route('memberships.index')->with('success', 'Member registered successfully.');
+        return redirect()
+            ->route('memberships.show', [$membership, 'registered' => 1])
+            ->with('success', "Member {$membership->full_name} (ID: {$membership->member_id}) registered successfully.");
+    }
+
+    public function show(Membership $membership)
+    {
+        $membership->load(['attendances' => fn ($q) => $q->latest('checked_in_at'), 'payments' => fn ($q) => $q->latest('paid_at')]);
+        return view('memberships.show', compact('membership'));
     }
 
     public function edit(Membership $membership)
@@ -95,76 +126,71 @@ class MembershipController extends Controller
 
     public function update(Request $request, Membership $membership)
     {
-        $data = $request->validate([
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:32'],
-            'member_type' => ['required', 'in:regular,student'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+        $validated = $request->validate([
+            'full_name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255'],
+            'phone' => ['required', 'string', 'max:50'],
+            'gender' => ['required', 'in:Male,Female,Other'],
+            'date_of_birth' => ['required', 'date'],
+            'photo' => ['nullable', 'image', 'max:4096'],
         ]);
 
-        DB::transaction(function () use ($data, $membership) {
-            $membership->member->update([
-                'first_name' => $data['first_name'],
-                'last_name' => $data['last_name'],
-                'email' => $data['email'] ?? null,
-                'phone' => $data['phone'] ?? null,
-            ]);
-
-            unset($data['first_name'], $data['last_name'], $data['email'], $data['phone']);
-            // If the type changed, keep the price in sync with the price list.
-            $data['amount_due'] = Membership::PRICES[$data['member_type']];
-            $data['plan_name'] = ucfirst($data['member_type']).' Monthly';
-
-            $membership->update($data);
-            $membership->refreshStatus();
-        });
-
-        return redirect()->route('memberships.index')->with('success', 'Membership updated.');
-    }
-
-    /**
-     * Record an additional (partial) payment toward this membership's balance.
-     */
-    public function addPayment(Request $request, Membership $membership)
-    {
-        $data = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0.01', 'max:'.$membership->balance],
-            'payment_method' => ['required', 'in:cash,gcash,other'],
-        ]);
-
-        Payment::create([
-            'membership_id' => $membership->id,
-            'payment_date' => now()->toDateString(),
-            'amount' => $data['amount'],
-            'payment_method' => $data['payment_method'],
-            'status' => 'completed',
-        ]);
-
-        $membership->increment('amount_paid', $data['amount']);
-
-        // Once fully paid for the first time, start the membership term today.
-        if ($membership->fresh()->is_fully_paid && ! $membership->start_date) {
-            $membership->start_date = now()->toDateString();
-            $membership->end_date = now()->addMonth()->toDateString();
-            $membership->save();
+        if ($request->hasFile('photo')) {
+            $validated['photo_path'] = $request->file('photo')->store('members', 'public');
         }
 
-        $membership->refresh()->refreshStatus();
+        $membership->update($validated);
 
-        return redirect()->route('memberships.index')->with('success', 'Payment recorded.');
+        return redirect()->route('memberships.show', $membership)->with('success', 'Member profile updated.');
+    }
+
+    public function renew(Request $request, Membership $membership)
+    {
+        $validated = $request->validate([
+            'plan_type' => ['required', 'in:Student Membership,Regular Membership'],
+            'duration_months' => ['required', 'integer', 'in:1,2,3,6,12'],
+            'payment_method' => ['required', 'in:Cash,GCash'],
+        ]);
+
+        $monthlyRate = Membership::PLAN_RATES[$validated['plan_type']] ?? 750;
+        $duration = (int) $validated['duration_months'];
+        $totalAmount = $monthlyRate * $duration;
+
+        $baseDate = ($membership->end_date && $membership->end_date->isFuture())
+            ? $membership->end_date->copy()
+            : Carbon::today();
+
+        $newEndDate = $baseDate->copy()->addMonths($duration);
+
+        DB::transaction(function () use ($membership, $validated, $monthlyRate, $duration, $totalAmount, $newEndDate) {
+            $membership->update([
+                'plan_type' => $validated['plan_type'],
+                'duration_months' => $duration,
+                'monthly_rate' => $monthlyRate,
+                'total_amount' => $totalAmount,
+                'payment_method' => $validated['payment_method'],
+                'start_date' => $membership->membership_status === 'Active' ? $membership->start_date : Carbon::today(),
+                'end_date' => $newEndDate,
+                'status' => 'Active',
+            ]);
+
+            Payment::create([
+                'membership_id' => $membership->id,
+                'payer_name' => $membership->full_name,
+                'category' => 'Membership Renewal',
+                'plan_label' => "{$validated['plan_type']} ({$duration} " . ($duration === 1 ? 'Month' : 'Months') . ")",
+                'amount' => $totalAmount,
+                'payment_method' => $validated['payment_method'],
+                'paid_at' => now(),
+            ]);
+        });
+
+        return redirect()->route('memberships.show', $membership)->with('success', 'Membership renewed successfully.');
     }
 
     public function destroy(Membership $membership)
     {
-        if ($membership->payments()->exists() || $membership->attendances()->exists()) {
-            return redirect()->route('memberships.index')->with('error', 'This membership has payment or attendance history and cannot be deleted.');
-        }
-
         $membership->delete();
-
-        return redirect()->route('memberships.index')->with('success', 'Membership record deleted.');
+        return redirect()->route('memberships.index')->with('success', 'Membership deleted.');
     }
 }

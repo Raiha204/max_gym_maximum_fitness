@@ -2,20 +2,23 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Attendance extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'membership_id',
-        'attendance_date',
-        'check_in',
+        'member_id',
+        'checked_in_at',
+        'verification_method',
     ];
 
-    public function membership()
+    protected $casts = [
+        'checked_in_at' => 'datetime',
+    ];
+
+    public function membership(): BelongsTo
     {
         return $this->belongsTo(Membership::class);
     }

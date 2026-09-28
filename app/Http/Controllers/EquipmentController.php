@@ -9,55 +9,37 @@ class EquipmentController extends Controller
 {
     public function index()
     {
-        $equipment = Equipment::withCount('maintenanceRecords')->latest()->paginate(10);
-
+        $equipment = Equipment::latest()->get();
         return view('equipment.index', compact('equipment'));
-    }
-
-    public function create()
-    {
-        return view('equipment.create');
     }
 
     public function store(Request $request)
     {
-        $data = $request->validate([
-            'equipment_name' => ['required', 'string', 'max:255'],
-            'category' => ['nullable', 'string', 'max:255'],
-            'status' => ['required', 'in:available,in_use,needs_repair,missing'],
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'category' => ['required', 'string', 'max:100'],
+            'status' => ['required', 'in:Operational,Under Maintenance,Out of Order'],
         ]);
+        $validated['last_inspected'] = today();
+        Equipment::create($validated);
 
-        Equipment::create($data);
-
-        return redirect()->route('equipment.index')->with('success', 'Equipment added.');
-    }
-
-    public function edit(Equipment $equipment)
-    {
-        return view('equipment.edit', compact('equipment'));
+        return back()->with('success', 'Equipment added to inventory.');
     }
 
     public function update(Request $request, Equipment $equipment)
     {
-        $data = $request->validate([
-            'equipment_name' => ['required', 'string', 'max:255'],
-            'category' => ['nullable', 'string', 'max:255'],
-            'status' => ['required', 'in:available,in_use,needs_repair,missing'],
+        $validated = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'category' => ['sometimes', 'required', 'string', 'max:100'],
+            'status' => ['required', 'in:Operational,Under Maintenance,Out of Order'],
         ]);
-
-        $equipment->update($data);
-
-        return redirect()->route('equipment.index')->with('success', 'Equipment updated.');
+        $equipment->update($validated);
+        return back()->with('success', 'Equipment updated.');
     }
 
     public function destroy(Equipment $equipment)
     {
-        if ($equipment->maintenanceRecords()->exists()) {
-            return redirect()->route('equipment.index')->with('error', 'This equipment has maintenance history and cannot be deleted.');
-        }
-
         $equipment->delete();
-
-        return redirect()->route('equipment.index')->with('success', 'Equipment removed.');
+        return back()->with('success', 'Equipment removed.');
     }
 }

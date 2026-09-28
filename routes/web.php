@@ -7,31 +7,40 @@ use App\Http\Controllers\EquipmentController;
 use App\Http\Controllers\MaintenanceController;
 use App\Http\Controllers\MembershipController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\WalkInController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', fn () => redirect()->route('login'));
 
 Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
+Route::post('/login', [AuthController::class, 'login'])->name('login.post');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-    Route::resource('memberships', MembershipController::class)->except(['show', 'destroy']);
-    Route::delete('memberships/{membership}', [MembershipController::class, 'destroy'])->name('memberships.destroy');
-    Route::post('memberships/{membership}/pay', [MembershipController::class, 'addPayment'])->name('memberships.pay');
+    // Members & Prepaid Memberships (5-Step Wizard + Digital QR Card + Renewals)
+    Route::resource('memberships', MembershipController::class);
+    Route::post('/memberships/{membership}/renew', [MembershipController::class, 'renew'])->name('memberships.renew');
 
-    Route::get('attendance', [AttendanceController::class, 'index'])->name('attendance.index');
-    Route::post('attendance', [AttendanceController::class, 'store'])->name('attendance.store');
-    Route::delete('attendance/{attendance}', [AttendanceController::class, 'destroy'])->name('attendance.destroy');
+    // Redesigned QR Scanner & Manual Search Attendance Module
+    Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
+    Route::get('/attendance/verify', [AttendanceController::class, 'verify'])->name('attendance.verify');
+    Route::post('/attendance', [AttendanceController::class, 'store'])->name('attendance.store');
 
-    Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
-    Route::post('payments', [PaymentController::class, 'store'])->name('payments.store');
+    // Walk-In Daily Sessions (Anonymous — No Walk-In Name, Cash or GCash Only)
+    Route::get('/walk-ins', [WalkInController::class, 'index'])->name('walk-ins.index');
+    Route::post('/walk-ins', [WalkInController::class, 'store'])->name('walk-ins.store');
 
-    Route::resource('equipment', EquipmentController::class)->except(['show']);
+    // Membership Payments Ledger & Revenue Reports
+    Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+    Route::get('/reports', [PaymentController::class, 'reports'])->name('reports.index');
 
-    Route::get('maintenance', [MaintenanceController::class, 'index'])->name('maintenance.index');
-    Route::post('maintenance', [MaintenanceController::class, 'store'])->name('maintenance.store');
-    Route::patch('maintenance/{maintenance}', [MaintenanceController::class, 'updateStatus'])->name('maintenance.update');
+    // Equipment & Maintenance
+    Route::resource('equipment', EquipmentController::class)->only(['index', 'store', 'update', 'destroy']);
+    Route::get('/maintenance', [MaintenanceController::class, 'index'])->name('maintenance.index');
+    Route::post('/maintenance', [MaintenanceController::class, 'store'])->name('maintenance.store');
+    Route::patch('/maintenance/{maintenance}/status', [MaintenanceController::class, 'updateStatus'])->name('maintenance.status');
+    Route::patch('/maintenance/{maintenance}/resolve', [MaintenanceController::class, 'resolve'])->name('maintenance.resolve');
+    Route::delete('/maintenance/{maintenance}', [MaintenanceController::class, 'destroy'])->name('maintenance.destroy');
 });

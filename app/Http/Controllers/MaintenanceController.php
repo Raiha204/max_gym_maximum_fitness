@@ -10,43 +10,83 @@ class MaintenanceController extends Controller
 {
     public function index()
     {
-        $records = Maintenance::with('equipment')->latest('maintenance_date')->paginate(10);
-        $equipment = Equipment::orderBy('equipment_name')->get();
-
-        return view('maintenance.index', compact('records', 'equipment'));
+        $maintenances = Maintenance::with('equipment')->latest('reported_at')->get();
+        $equipment = Equipment::orderBy('name')->get();
+        return view('maintenance.index', compact('maintenances', 'equipment'));
     }
 
     public function store(Request $request)
     {
-        $data = $request->validate([
-            'equipment_id' => ['required', 'exists:equipment,id'],
-            'description' => ['required', 'string'],
-            'cost' => ['nullable', 'numeric', 'min:0'],
+        $validated = $request->validate([
+            'equipment_id' => ['nullable', 'string'],
+            'custom_equipment_name' => ['nullable', 'string', 'max:255'],
+            'category' => ['nullable', 'string', 'max:100'],
+            'priority' => ['nullable', 'in:Low,Medium,High,Critical'],
+            'issue' => ['required', 'string', 'max:500'],
         ]);
-        $data['maintenance_date'] = now()->toDateString();
-        $data['cost'] = $data['cost'] ?? 0;
-        $data['status'] = 'reported';
 
-        Maintenance::create($data);
+        $eq = null;
+        if (!empty($validated['equipment_id']) && $validated['equipment_id'] !== 'custom') {
+            $eq = Equipment::find($validated['equipment_id']);
+        }
 
-        Equipment::where('id', $data['equipment_id'])->update(['status' => 'needs_repair']);
+        $equipmentName = $eq ? $eq->name : ($validated['custom_equipment_name'] ?: 'General Facility Equipment');
+        $category = $eq ? $eq->category : ($validated['category'] ?: 'Strength Machines');
 
-        return redirect()->route('maintenance.index')->with('success', 'Maintenance issue reported.');
+        Maintenance::create([
+            'equipment_id' => $eq?->id,
+            'equipment_name' => $equipmentName,
+            'category' => $category,
+            'priority' => $validated['priority'] ?? 'Medium',
+            'issue' => $validated['issue'],
+            'status' => 'Open',
+            'reported_at' => now(),
+        ]);
+
+        if ($eq) {
+            $eq->update(['status' => 'Under Maintenance']);
+        }
+
+        return back()->with('success', 'Equipment maintenance report logged.');
     }
 
     public function updateStatus(Request $request, Maintenance $maintenance)
     {
-        $data = $request->validate([
-            'status' => ['required', 'in:reported,in_progress,resolved'],
-            'cost' => ['nullable', 'numeric', 'min:0'],
+        $validated = $request->validate([
+            'status' => ['required', 'in:Open,In Progress,Resolved'],
         ]);
 
-        $maintenance->update($data);
+        $maintenance->update([
+            'status' => $validated['status'],
+            'resolved_at' => $validated['status'] === 'Resolved' ? now() : null,
+        ]);
 
-        if ($data['status'] === 'resolved') {
-            $maintenance->equipment->update(['status' => 'available']);
+        if ($maintenance->equipment) {
+            $maintenance->equipment->update([
+                'status' => $validated['status'] === 'Resolved' ? 'Operational' : 'Under Maintenance',
+            ]);
         }
 
-        return redirect()->route('maintenance.index')->with('success', 'Maintenance record updated.');
+        return back()->with('success', 'Maintenance status updated.');
+    }
+
+    public function resolve(Maintenance $maintenance)
+    {
+        $maintenance->update([
+            'status' => 'Resolved',
+            'resolved_at' => now(),
+        ]);
+
+        if ($maintenance->equipment) {
+            $maintenance->equipment->update(['status' => 'Operational']);
+        }
+
+        return back()->with('success', 'Maintenance issue resolved.');
+    }
+
+    public function destroy(Maintenance $maintenance)
+    {
+        $maintenance->delete();
+        return back()->with('success', 'Maintenance report deleted.');
     }
 }

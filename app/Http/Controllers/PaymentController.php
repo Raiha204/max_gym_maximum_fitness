@@ -3,42 +3,48 @@
 namespace App\Http\Controllers;
 
 use App\Models\Payment;
+use App\Models\WalkIn;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class PaymentController extends Controller
 {
     public function index(Request $request)
     {
-        $payments = Payment::with('membership.member')
-            ->when($request->date, fn ($q, $date) => $q->whereDate('payment_date', $date))
-            ->latest('payment_date')
-            ->paginate(15)
-            ->withQueryString();
+        $method = $request->query('method', 'All');
+        $selectedDate = $request->query('date', Carbon::today()->format('Y-m-d'));
 
-        $totalForDay = (clone $payments)->getCollection()->sum('amount');
+        $query = Payment::with('membership')->latest('paid_at');
+        if (in_array($method, ['Cash', 'GCash'], true)) {
+            $query->where('payment_method', $method);
+        }
+        $payments = $query->get();
 
-        return view('payments.index', compact('payments', 'totalForDay'));
+        $allPayments = Payment::latest('paid_at')->get();
+        $allWalkIns = WalkIn::latest('paid_at')->get();
+
+        return view('payments.index', compact(
+            'payments',
+            'allPayments',
+            'allWalkIns',
+            'method',
+            'selectedDate'
+        ));
     }
 
-    /**
-     * Log a walk-in (single day-use) payment. No name needed — just the
-     * visitor type, which decides the fixed price (Regular ₱65 / Student ₱50).
-     */
-    public function store(Request $request)
+    public function reports(Request $request)
     {
-        $data = $request->validate([
-            'visitor_type' => ['required', 'in:regular,student'],
-            'payment_method' => ['required', 'in:cash,gcash,other'],
-        ]);
+        $period = $request->query('period', 'month');
+        $selectedDate = $request->query('date', Carbon::today()->format('Y-m-d'));
 
-        Payment::create([
-            'visitor_type' => $data['visitor_type'],
-            'amount' => Payment::WALK_IN_PRICES[$data['visitor_type']],
-            'payment_date' => now()->toDateString(),
-            'payment_method' => $data['payment_method'],
-            'status' => 'completed',
-        ]);
+        $allPayments = Payment::with('membership')->latest('paid_at')->get();
+        $allWalkIns = WalkIn::latest('paid_at')->get();
 
-        return redirect()->route('payments.index')->with('success', 'Walk-in payment logged.');
+        return view('reports.index', compact(
+            'allPayments',
+            'allWalkIns',
+            'period',
+            'selectedDate'
+        ));
     }
 }

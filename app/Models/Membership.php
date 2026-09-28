@@ -2,111 +2,124 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Membership extends Model
 {
-    use HasFactory;
-
-    /**
-     * Monthly membership price per type. Kept in one place so the whole
-     * system (registration form, controller) always agrees on the price.
-     */
-    public const PRICES = [
-        'regular' => 750,
-        'student' => 650,
+    public const PLAN_RATES = [
+        'Student Membership' => 650,
+        'Regular Membership' => 750,
     ];
-
-    /**
-     * Flat penalty deducted from what's already been paid if the member
-     * misses their payment due date without completing the full amount.
-     */
-    public const LATE_PENALTY = 50;
 
     protected $fillable = [
         'member_id',
-        'member_type',
-        'plan_name',
-        'amount_due',
-        'amount_paid',
-        'payment_due_date',
-        'penalty_applied',
+        'full_name',
+        'email',
+        'phone',
+        'gender',
+        'date_of_birth',
+        'photo_path',
+        'plan_type',
+        'duration_months',
+        'monthly_rate',
+        'total_amount',
+        'payment_method',
         'start_date',
         'end_date',
         'status',
     ];
 
     protected $casts = [
-        'penalty_applied' => 'boolean',
+        'date_of_birth' => 'date',
+        'start_date' => 'date',
+        'end_date' => 'date',
+        'duration_months' => 'integer',
+        'monthly_rate' => 'float',
+        'total_amount' => 'float',
     ];
 
-    public function attendances()
+    public static function generateMemberId(): string
+    {
+        do {
+            $id = (string) random_int(100000, 999999);
+        } while (self::where('member_id', $id)->exists());
+
+        return $id;
+    }
+
+    public function attendances(): HasMany
     {
         return $this->hasMany(Attendance::class);
     }
 
-    public function member()
-    {
-        return $this->belongsTo(Member::class);
-    }
-
-    public function payments()
+    public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
     }
 
-    public function fullName(): string
+    public function getDaysRemainingAttribute(): int
     {
-        return $this->member?->fullName() ?? 'Unknown member';
+        if (!$this->end_date) {
+            return 0;
+        }
+        $diff = Carbon::today()->diffInDays($this->end_date->copy()->startOfDay(), false);
+        return max(0, (int) $diff);
     }
 
-    public function getBalanceAttribute(): float
+    public function getMembershipStatusAttribute(): string
     {
-        return round($this->amount_due - $this->amount_paid, 2);
+        if (!$this->end_date) {
+            return 'Expired';
+        }
+        $diff = Carbon::today()->diffInDays($this->end_date->copy()->startOfDay(), false);
+        return $diff > 0 ? 'Active' : 'Expired';
     }
 
-    public function getIsFullyPaidAttribute(): bool
+    public function getDisplayStatusAttribute(): string
     {
-        return $this->balance <= 0;
+        if ($this->membership_status === 'Expired') {
+            return 'expired';
+        }
+        if ($this->days_remaining <= 7) {
+            return 'expiring';
+        }
+        return 'active';
     }
 
-    public function getIsPastDueAttribute(): bool
+    public function getPhotoUrlAttribute(): ?string
     {
-        return ! $this->is_fully_paid
-            && $this->payment_due_date
-            && now()->toDateString() > $this->payment_due_date;
+        if (!$this->photo_path) {
+            return null;
+        }
+        if (str_starts_with($this->photo_path, 'http') || str_starts_with($this->photo_path, 'data:')) {
+            return $this->photo_path;
+        }
+        return asset('storage/' . $this->photo_path);
     }
 
     /**
-     * If the member missed their payment due date without paying in full,
-     * deduct the flat late penalty from what they've already paid. Only
-     * ever applied once per membership (guarded by penalty_applied).
+     * Offline Member QR Profile Data (No token line below expiration date)
      */
-    public function applyLatePenaltyIfNeeded(): void
+    public function getOfflineQrTextAttribute(): string
     {
-        if ($this->penalty_applied || ! $this->is_past_due) {
-            return;
-        }
-
-        $this->amount_paid = max(0, $this->amount_paid - self::LATE_PENALTY);
-        $this->penalty_applied = true;
-        $this->save();
-    }
-
-    /**
-     * Recalculate status based on payment and dates.
-     * Membership only becomes active once fully paid, per gym's business rule.
-     */
-    public function refreshStatus(): void
-    {
-        if (! $this->is_fully_paid) {
-            $this->status = 'pending';
-        } elseif ($this->end_date && now()->toDateString() > $this->end_date) {
-            $this->status = 'expired';
-        } else {
-            $this->status = 'active';
-        }
-        $this->save();
+        $expires = optional($this->end_date)->format('F j, Y') ?? '—';
+        return implode("\n", [
+            'MAX GYM MEMBER',
+            '',
+            $this->full_name,
+            '',
+            "Member ID: {$this->member_id}",
+            '',
+            'Membership:',
+            $this->plan_type,
+            '',
+            'Status:',
+            $this->membership_status,
+            '',
+            'Expires:',
+            $expires,
+        ]);
     }
 }

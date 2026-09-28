@@ -1,62 +1,112 @@
 @extends('layouts.app')
-@section('title', 'Walk-in Payments')
+
+@section('title', 'Membership Payments & Revenue Summary — MAX GYM')
 
 @section('content')
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <div class="bg-white rounded shadow p-5 lg:col-span-1 h-fit">
-        <h2 class="font-bold mb-3 text-sm uppercase text-gray-600">Log a Walk-in Payment</h2>
-        <form method="POST" action="{{ route('payments.store') }}" class="space-y-3">
-            @csrf
-            <label class="border border-gray-300 rounded px-4 py-3 flex items-center gap-2 cursor-pointer has-[:checked]:border-red-600 has-[:checked]:bg-red-50">
-                <input type="radio" name="visitor_type" value="regular" checked class="accent-red-600">
-                <span class="text-sm">Regular — <span class="font-semibold">₱65</span></span>
-            </label>
-            <label class="border border-gray-300 rounded px-4 py-3 flex items-center gap-2 cursor-pointer has-[:checked]:border-red-600 has-[:checked]:bg-red-50">
-                <input type="radio" name="visitor_type" value="student" class="accent-red-600">
-                <span class="text-sm">Student — <span class="font-semibold">₱50</span></span>
-            </label>
-            <select name="payment_method" class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
-                <option value="cash">Cash</option>
-                <option value="gcash">GCash</option>
-                <option value="other">Other</option>
-            </select>
-            <button class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded font-semibold text-sm">Log Payment</button>
-        </form>
+@php
+    $todayTotal = $allPayments->filter(fn($p) => optional($p->paid_at)->isToday())->sum('amount')
+        + $allWalkIns->filter(fn($w) => optional($w->paid_at)->isToday())->sum('amount');
+    $weekTotal = $allPayments->filter(fn($p) => optional($p->paid_at)->greaterThanOrEqualTo(now()->subDays(7)->startOfDay()))->sum('amount')
+        + $allWalkIns->filter(fn($w) => optional($w->paid_at)->greaterThanOrEqualTo(now()->subDays(7)->startOfDay()))->sum('amount');
+    $monthTotal = $allPayments->filter(fn($p) => optional($p->paid_at)->isCurrentMonth())->sum('amount')
+        + $allWalkIns->filter(fn($w) => optional($w->paid_at)->isCurrentMonth())->sum('amount');
+
+    $datePayments = $allPayments->filter(fn($p) => optional($p->paid_at)->format('Y-m-d') === $selectedDate);
+    $dateWalkIns = $allWalkIns->filter(fn($w) => optional($w->paid_at)->format('Y-m-d') === $selectedDate);
+    $dateMemTotal = $datePayments->sum('amount');
+    $dateWalkInTotal = $dateWalkIns->sum('amount');
+    $dateGrandTotal = $dateMemTotal + $dateWalkInTotal;
+    $dateCashTotal = $datePayments->where('payment_method', 'Cash')->sum('amount') + $dateWalkIns->where('payment_method', 'Cash')->sum('amount');
+    $dateGcashTotal = $datePayments->where('payment_method', 'GCash')->sum('amount') + $dateWalkIns->where('payment_method', 'GCash')->sum('amount');
+@endphp
+<div class="space-y-6">
+    <div class="bg-[#111111] text-white rounded-xl border-l-4 border-[#E31B23] p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+            <h1 class="text-xl font-bold text-white">Membership Payments & Revenue Summary</h1>
+            <p class="text-xs text-[#D1D5DB] mt-0.5">Total revenue summary for Today, This Week, This Month, and Specific Date lookup.</p>
+        </div>
+        <a href="{{ route('reports.index') }}" class="px-4 py-2 text-xs font-semibold text-white bg-[#E31B23] hover:bg-[#B51219] rounded-lg">Open Revenue Reports →</a>
     </div>
 
-    <div class="lg:col-span-2">
-        <div class="flex justify-between items-center mb-4">
-            <form method="GET">
-                <input type="date" name="date" value="{{ request('date') }}" onchange="this.form.submit()"
-                       class="border border-gray-300 rounded px-3 py-2 text-sm">
-            </form>
-            <div class="text-sm font-semibold">Total shown: <span class="text-red-600">₱{{ number_format($totalForDay, 2) }}</span></div>
+    <!-- Total Revenue Summary (Today, This Week, This Month) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-white rounded-xl border border-[#E5E7EB] border-t-4 border-t-[#E31B23] p-4 shadow-sm">
+            <div class="text-xs font-bold text-[#6B7280]">Today's Revenue</div>
+            <div class="text-2xl font-mono font-extrabold text-[#111111] mt-1">₱{{ number_format($todayTotal, 2) }}</div>
         </div>
-        <div class="bg-white rounded shadow overflow-hidden">
-            <table class="w-full text-sm">
-                <thead class="bg-black text-white uppercase text-xs">
+        <div class="bg-white rounded-xl border border-[#E5E7EB] border-t-4 border-t-[#374151] p-4 shadow-sm">
+            <div class="text-xs font-bold text-[#6B7280]">This Week's Revenue</div>
+            <div class="text-2xl font-mono font-extrabold text-[#111111] mt-1">₱{{ number_format($weekTotal, 2) }}</div>
+        </div>
+        <div class="bg-white rounded-xl border border-[#E5E7EB] border-t-4 border-t-[#E31B23] p-4 shadow-sm">
+            <div class="text-xs font-bold text-[#6B7280]">This Month's Revenue</div>
+            <div class="text-2xl font-mono font-extrabold text-[#111111] mt-1">₱{{ number_format($monthTotal, 2) }}</div>
+        </div>
+    </div>
+
+    <!-- Specific Date Lookup (No Quick Dates & No Helper Text) -->
+    <div class="bg-white rounded-xl border border-[#E5E7EB] p-5 space-y-4">
+        <form method="GET" action="{{ route('payments.index') }}" class="flex flex-wrap items-center justify-between gap-3">
+            <input type="hidden" name="method" value="{{ $method }}">
+            <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-[#E31B23] text-white uppercase">Specific Date Lookup</span>
+                <span class="text-xs font-bold text-[#111111]">Revenue for {{ \Carbon\Carbon::parse($selectedDate)->format('F j, Y') }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <label class="text-xs font-semibold text-[#111111]">Select Date:</label>
+                <input type="date" name="date" value="{{ $selectedDate }}" onchange="this.form.submit()" class="px-3 py-1.5 text-xs font-mono font-bold rounded-lg border-2 border-[#E31B23] bg-white text-[#111111]">
+            </div>
+        </form>
+
+        <div class="grid grid-cols-2 xl:grid-cols-4 gap-2.5 text-[10px]">
+            <div class="p-3 rounded-lg bg-white border-l-2 border-[#E31B23] border-y border-r border-[#E5E7EB]">
+                <div class="text-[#6B7280]">Total Revenue ({{ \Carbon\Carbon::parse($selectedDate)->format('M j, Y') }})</div>
+                <div class="text-base font-mono font-bold text-[#E31B23] mt-1">₱{{ number_format($dateGrandTotal, 2) }}</div>
+                <div class="text-[9px] text-[#6B7280] mt-1">{{ $datePayments->count() + $dateWalkIns->count() }} transactions</div>
+            </div>
+            <div class="p-3 rounded-lg bg-[#F9FAFB] border border-[#E5E7EB]">
+                <div class="text-[#6B7280]">Membership Payment Revenue</div>
+                <div class="text-base font-mono font-bold text-[#111111] mt-1">₱{{ number_format($dateMemTotal, 2) }}</div>
+                <div class="text-[9px] text-[#6B7280] mt-1">{{ $datePayments->count() }} payments</div>
+            </div>
+            <div class="p-3 rounded-lg bg-[#F9FAFB] border border-[#E5E7EB]">
+                <div class="text-[#6B7280]">Walk-In Revenue</div>
+                <div class="text-base font-mono font-bold text-[#111111] mt-1">₱{{ number_format($dateWalkInTotal, 2) }}</div>
+                <div class="text-[9px] text-[#6B7280] mt-1">{{ $dateWalkIns->count() }} sessions</div>
+            </div>
+            <div class="p-3 rounded-lg bg-[#F9FAFB] border border-[#E5E7EB]">
+                <div class="text-[#6B7280]">Cash vs. GCash</div>
+                <div class="text-[10px] font-mono font-bold text-[#111111] mt-1">Cash: ₱{{ number_format($dateCashTotal, 2) }}</div>
+                <div class="text-[10px] font-mono font-bold text-[#111111] mt-1">GCash: ₱{{ number_format($dateGcashTotal, 2) }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Membership Payments Ledger -->
+    <div class="bg-white rounded-xl border border-[#E5E7EB] p-6">
+        <h2 class="text-sm font-bold text-[#111111] pb-3 mb-4 border-b border-[#E5E7EB]">Membership Payments Ledger</h2>
+        <table class="w-full text-left border-collapse text-xs">
+            <thead>
+                <tr class="bg-[#111111] text-white">
+                    <th class="py-3 px-4">Member</th>
+                    <th class="py-3 px-4">Category & Plan</th>
+                    <th class="py-3 px-4">Payment Method</th>
+                    <th class="py-3 px-4">Date & Time</th>
+                    <th class="py-3 px-4 text-right">Amount</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-[#E5E7EB]">
+                @foreach($payments as $pay)
                     <tr>
-                        <th class="text-left px-5 py-3">Payment</th>
-                        <th class="text-left px-5 py-3">Date</th>
-                        <th class="text-left px-5 py-3">Method</th>
-                        <th class="text-right px-5 py-3">Amount</th>
+                        <td class="py-3 px-4 font-semibold text-[#111111]">{{ $pay->payer_name }}</td>
+                        <td class="py-3 px-4 text-[#6B7280]">{{ $pay->category }} — {{ $pay->plan_label }}</td>
+                        <td class="py-3 px-4 text-[#6B7280]">{{ $pay->payment_method }}</td>
+                        <td class="py-3 px-4 font-mono text-[#6B7280]">{{ optional($pay->paid_at)->format('M j, Y g:i A') }}</td>
+                        <td class="py-3 px-4 text-right font-mono font-bold text-[#111111]">₱{{ number_format($pay->amount, 2) }}</td>
                     </tr>
-                </thead>
-                <tbody>
-                    @forelse ($payments as $p)
-                        <tr class="border-t hover:bg-gray-50">
-                            <td class="px-5 py-3 font-medium">{{ $p->label }}</td>
-                            <td class="px-5 py-3">{{ \Carbon\Carbon::parse($p->payment_date)->format('M d, Y') }}</td>
-                            <td class="px-5 py-3 uppercase text-xs">{{ $p->payment_method }}</td>
-                            <td class="px-5 py-3 text-right font-semibold">₱{{ number_format($p->amount, 2) }}</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="4" class="px-5 py-6 text-center text-gray-400">No payments recorded.</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-        <div class="mt-4">{{ $payments->links() }}</div>
+                @endforeach
+            </tbody>
+        </table>
     </div>
 </div>
 @endsection

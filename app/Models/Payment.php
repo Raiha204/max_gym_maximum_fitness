@@ -2,44 +2,28 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Payment extends Model
 {
-    use HasFactory;
-
-    /**
-     * Walk-in (single day-use) price per visitor type.
-     */
-    public const WALK_IN_PRICES = [
-        'regular' => 65,
-        'student' => 50,
-    ];
-
     protected $fillable = [
         'membership_id',
-        'visitor_type',
-        'payment_date',
+        'payer_name',
+        'category',
+        'plan_label',
         'amount',
         'payment_method',
-        'status',
+        'paid_at',
     ];
 
-    public function membership()
+    protected $casts = [
+        'amount' => 'float',
+        'paid_at' => 'datetime',
+    ];
+
+    public function membership(): BelongsTo
     {
         return $this->belongsTo(Membership::class);
-    }
-
-    /**
-     * A friendly label for display: who/what this payment was for.
-     */
-    public function getLabelAttribute(): string
-    {
-        if ($this->membership) {
-            return 'Membership — '.$this->membership->fullName();
-        }
-
-        return 'Walk-in ('.ucfirst($this->visitor_type).')';
     }
 }
