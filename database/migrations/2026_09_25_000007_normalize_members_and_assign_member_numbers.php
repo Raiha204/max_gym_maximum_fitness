@@ -9,63 +9,134 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('members', function (Blueprint $table) {
-            $table->id();
-            $table->string('member_number', 32)->unique();
-            $table->string('first_name');
-            $table->string('last_name');
-            $table->string('email')->nullable();
-            $table->string('phone', 32)->nullable();
-            $table->timestamps();
-        });
+        if (!Schema::hasColumn('memberships', 'full_name')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('full_name')->nullable()->after('id');
+            });
+        }
 
-        Schema::table('memberships', function (Blueprint $table) {
-            $table->foreignId('member_id')->nullable()->after('id')->constrained('members')->restrictOnDelete();
-        });
+        if (!Schema::hasColumn('memberships', 'email')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('email')->nullable()->after('full_name');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'phone')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('phone', 50)->nullable()->after('email');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'gender')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('gender', 20)->default('Male')->after('phone');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'date_of_birth')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->date('date_of_birth')->nullable()->after('gender');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'photo_path')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('photo_path')->nullable()->after('date_of_birth');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'plan_type')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('plan_type')->nullable()->after('photo_path');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'duration_months')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->unsignedInteger('duration_months')->default(1)->after('plan_type');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'monthly_rate')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->decimal('monthly_rate', 10, 2)->default(650.00)->after('duration_months');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'total_amount')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->decimal('total_amount', 10, 2)->default(650.00)->after('monthly_rate');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'payment_method')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('payment_method', 30)->default('Cash')->after('total_amount');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'start_date')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->date('start_date')->nullable()->after('payment_method');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'end_date')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->date('end_date')->nullable()->after('start_date');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'status')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('status', 30)->default('Active')->after('end_date');
+            });
+        }
+
+        if (!Schema::hasColumn('memberships', 'member_id')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('member_id', 12)->nullable()->after('id');
+            });
+        }
 
         // Existing membership rows do not contain enough information to
         // safely decide whether two same-named records are the same person.
         // Preserve each row as its own member during this migration.
         DB::table('memberships')->orderBy('id')->chunkById(500, function ($memberships) {
             foreach ($memberships as $membership) {
-                $memberId = DB::table('members')->insertGetId([
-                    'member_number' => 'LEGACY-'.$membership->id,
-                    'first_name' => $membership->first_name,
-                    'last_name' => $membership->last_name,
-                    'created_at' => $membership->created_at,
-                    'updated_at' => $membership->updated_at,
-                ]);
+                if (empty($membership->full_name) && !empty($membership->first_name)) {
+                    $fullName = trim(implode(' ', array_filter([
+                        $membership->first_name ?? null,
+                        $membership->last_name ?? null,
+                    ])));
 
-                DB::table('members')->where('id', $memberId)->update([
-                    'member_number' => 'MAX-'.str_pad((string) $memberId, 8, '0', STR_PAD_LEFT),
-                ]);
+                    DB::table('memberships')->where('id', $membership->id)->update([
+                        'full_name' => $fullName,
+                    ]);
+                }
 
-                DB::table('memberships')->where('id', $membership->id)->update(['member_id' => $memberId]);
+                if (empty($membership->member_id)) {
+                    $legacyMemberId = 'LEGACY-' . $membership->id;
+                    DB::table('memberships')->where('id', $membership->id)->update(['member_id' => $legacyMemberId]);
+                }
             }
         });
 
-        Schema::table('memberships', function (Blueprint $table) {
-            $table->foreignId('member_id')->nullable(false)->change();
-            $table->dropColumn(['first_name', 'last_name']);
-            $table->index(['status', 'end_date']);
-            $table->index('payment_due_date');
-        });
+        if (Schema::hasColumn('memberships', 'first_name') || Schema::hasColumn('memberships', 'last_name')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('member_id', 12)->nullable(false)->change();
+                $table->dropColumn(['first_name', 'last_name']);
+            });
+        }
 
-        Schema::table('payments', function (Blueprint $table) {
-            $table->index(['payment_date', 'status']);
-            $table->dropForeign(['membership_id']);
-            $table->foreign('membership_id')->references('id')->on('memberships')->restrictOnDelete();
-        });
-
-        Schema::table('attendances', function (Blueprint $table) {
-            $table->dropForeign(['membership_id']);
-            $table->foreign('membership_id')->references('id')->on('memberships')->restrictOnDelete();
-        });
-
-        Schema::table('maintenance', function (Blueprint $table) {
-            $table->dropForeign(['equipment_id']);
-            $table->foreign('equipment_id')->references('id')->on('equipment')->restrictOnDelete();
-        });
+        $legacyColumns = ['member_type', 'plan_name', 'amount_due', 'amount_paid', 'payment_due_date', 'penalty_applied'];
+        foreach ($legacyColumns as $column) {
+            if (Schema::hasColumn('memberships', $column)) {
+                Schema::table('memberships', function (Blueprint $table) use ($column) {
+                    $table->dropColumn($column);
+                });
+            }
+        }
 
     }
 
@@ -78,40 +149,24 @@ return new class extends Migration
 
         DB::table('memberships')->orderBy('id')->chunkById(500, function ($memberships) {
             foreach ($memberships as $membership) {
-                $member = DB::table('members')->where('id', $membership->member_id)->first();
-                if ($member) {
+                if (!empty($membership->full_name)) {
+                    $parts = preg_split('/\s+/', trim($membership->full_name));
+                    $firstName = $parts[0] ?? null;
+                    $lastName = implode(' ', array_slice($parts, 1)) ?: null;
+
                     DB::table('memberships')->where('id', $membership->id)->update([
-                        'first_name' => $member->first_name,
-                        'last_name' => $member->last_name,
+                        'first_name' => $firstName,
+                        'last_name' => $lastName,
                     ]);
                 }
             }
         });
 
-        Schema::table('payments', function (Blueprint $table) {
-            $table->dropIndex(['payment_date', 'status']);
-            $table->dropForeign(['membership_id']);
-            $table->foreign('membership_id')->references('id')->on('memberships')->cascadeOnDelete();
-        });
-
-        Schema::table('attendances', function (Blueprint $table) {
-            $table->dropForeign(['membership_id']);
-            $table->foreign('membership_id')->references('id')->on('memberships')->cascadeOnDelete();
-        });
-
-        Schema::table('maintenance', function (Blueprint $table) {
-            $table->dropForeign(['equipment_id']);
-            $table->foreign('equipment_id')->references('id')->on('equipment')->cascadeOnDelete();
-        });
-
-        Schema::table('memberships', function (Blueprint $table) {
-            $table->dropIndex(['status', 'end_date']);
-            $table->dropIndex(['payment_due_date']);
-            $table->dropConstrainedForeignId('member_id');
-            $table->string('first_name')->nullable(false)->change();
-            $table->string('last_name')->nullable(false)->change();
-        });
-
-        Schema::dropIfExists('members');
+        if (Schema::hasColumn('memberships', 'first_name') || Schema::hasColumn('memberships', 'last_name')) {
+            Schema::table('memberships', function (Blueprint $table) {
+                $table->string('first_name')->nullable(false)->change();
+                $table->string('last_name')->nullable(false)->change();
+            });
+        }
     }
 };

@@ -10,14 +10,13 @@ return new class extends Migration
     {
         Schema::create('payments', function (Blueprint $table) {
             $table->id();
-            // Set for a membership payment (initial or balance top-up). Null for a walk-in.
-            $table->foreignId('membership_id')->nullable()->constrained()->onDelete('cascade');
-            // Set for a walk-in payment, to know which preset price applied (Regular ₱65 / Student ₱50).
-            $table->enum('visitor_type', ['regular', 'student'])->nullable();
-            $table->date('payment_date');
-            $table->decimal('amount', 8, 2);
-            $table->enum('payment_method', ['cash', 'gcash', 'other'])->default('cash');
-            $table->enum('status', ['completed', 'refunded'])->default('completed');
+            $table->foreignId('membership_id')->nullable()->constrained('memberships')->nullOnDelete();
+            $table->string('payer_name');
+            $table->string('category')->default('Membership Registration');
+            $table->string('plan_label')->nullable();
+            $table->decimal('amount', 10, 2);
+            $table->string('payment_method', 30)->default('Cash');
+            $table->timestamp('paid_at');
             $table->timestamps();
         });
     }

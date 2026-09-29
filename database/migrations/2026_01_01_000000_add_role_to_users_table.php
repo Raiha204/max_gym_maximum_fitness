@@ -8,9 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->enum('role', ['admin', 'cashier'])->default('cashier')->after('password');
-        });
+        if (Schema::hasTable('users') && !Schema::hasColumn('users', 'role')) {
+            Schema::table('users', function (Blueprint $table) {
+                $table->enum('role', ['admin', 'cashier'])->default('cashier')->after('password');
+            });
+        }
     }
 
     public function down(): void

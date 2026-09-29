@@ -10,9 +10,12 @@ return new class extends Migration
     {
         Schema::create('equipment', function (Blueprint $table) {
             $table->id();
-            $table->string('equipment_name');
-            $table->string('category')->nullable();
-            $table->enum('status', ['available', 'in_use', 'needs_repair', 'missing'])->default('available');
+            $table->string('code', 50)->nullable();
+            $table->string('name');
+            $table->string('category', 100);
+            $table->string('status', 40)->default('Operational');
+            $table->date('last_inspected')->nullable();
+            $table->text('notes')->nullable();
             $table->timestamps();
         });
     }

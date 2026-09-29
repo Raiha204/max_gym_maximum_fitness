@@ -10,9 +10,10 @@ return new class extends Migration
     {
         Schema::create('attendances', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('membership_id')->constrained()->onDelete('cascade');
-            $table->date('attendance_date');
-            $table->time('check_in');
+            $table->foreignId('membership_id')->constrained('memberships')->cascadeOnDelete();
+            $table->string('member_id', 12)->index();
+            $table->timestamp('checked_in_at');
+            $table->string('verification_method', 40)->default('QR Code Scan');
             $table->timestamps();
         });
     }

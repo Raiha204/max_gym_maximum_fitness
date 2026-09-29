@@ -10,11 +10,14 @@ return new class extends Migration
     {
         Schema::create('maintenance', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('equipment_id')->constrained('equipment')->onDelete('cascade');
-            $table->date('maintenance_date');
-            $table->text('description')->nullable();
-            $table->decimal('cost', 8, 2)->default(0);
-            $table->enum('status', ['reported', 'in_progress', 'resolved'])->default('reported');
+            $table->foreignId('equipment_id')->nullable()->constrained('equipment')->nullOnDelete();
+            $table->string('equipment_name')->nullable();
+            $table->string('category', 100)->nullable();
+            $table->string('priority', 30)->default('Medium');
+            $table->string('issue');
+            $table->string('status', 30)->default('Open');
+            $table->timestamp('reported_at');
+            $table->timestamp('resolved_at')->nullable();
             $table->timestamps();
         });
     }
