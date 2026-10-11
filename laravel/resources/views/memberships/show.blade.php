@@ -38,7 +38,7 @@
                     <tbody class="divide-y divide-[#E5E7EB]">
                         <tr><th class="w-2/5 text-left font-semibold text-[#6B7280] bg-[#F9FAFB] px-4 py-2.5">Surname</th><td class="px-4 py-2.5 font-bold text-[#111111]">{{ $membership->surname }}</td></tr>
                         <tr><th class="text-left font-semibold text-[#6B7280] bg-[#F9FAFB] px-4 py-2.5">First Name</th><td class="px-4 py-2.5 font-bold text-[#111111]">{{ $membership->given_name ?: '—' }}</td></tr>
-                        <tr><th class="text-left font-semibold text-[#6B7280] bg-[#F9FAFB] px-4 py-2.5">Due Date (Expires On)</th><td class="px-4 py-2.5 font-bold {{ $membership->membership_status === 'Active' ? 'text-[#111111]' : 'text-[#B91C1C]' }}">{{ optional($membership->end_date)->format('F j, Y') }}</td></tr>
+                        <tr><th class="text-left font-semibold text-[#6B7280] bg-[#F9FAFB] px-4 py-2.5">Due Date (Expires On)</th><td class="px-4 py-2.5 font-bold {{ $membership->membership_status !== 'Expired' ? 'text-[#111111]' : 'text-[#B91C1C]' }}">{{ optional($membership->end_date)->format('F j, Y') }}</td></tr>
                         <tr><th class="text-left font-semibold text-[#6B7280] bg-[#F9FAFB] px-4 py-2.5">Days Remaining</th><td class="px-4 py-2.5 font-mono font-bold {{ $membership->days_remaining > 0 ? 'text-[#166534]' : 'text-[#B91C1C]' }}">{{ $membership->days_remaining }} {{ $membership->days_remaining === 1 ? 'Day' : 'Days' }}</td></tr>
                         <tr><th class="text-left font-semibold text-[#6B7280] bg-[#F9FAFB] px-4 py-2.5">Membership Status</th><td class="px-4 py-2.5 font-bold {{ $membership->membership_status === 'Active' ? 'text-[#166534]' : ($membership->membership_status === 'Partial' ? 'text-amber-700' : 'text-[#B91C1C]') }}">{{ $membership->membership_status }}</td></tr>
                         <tr><th class="text-left font-semibold text-[#6B7280] bg-[#F9FAFB] px-4 py-2.5">Membership Type</th><td class="px-4 py-2.5 font-semibold text-[#111111]">{{ $membership->plan_type }}</td></tr>
@@ -46,11 +46,15 @@
                         <tr><th class="text-left font-semibold text-[#6B7280] bg-[#F9FAFB] px-4 py-2.5">Date of Birth</th><td class="px-4 py-2.5 font-semibold text-[#111111]">{{ optional($membership->date_of_birth)->format('d/m/Y') ?? '—' }}</td></tr>
                     </tbody>
                 </table>
-                @if($membership->daily_credit_enabled)
+                @if($membership->daily_credit_enabled && $membership->remaining_amount > 0)
                     <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm">
                         <div class="flex justify-between gap-4"><span>Available Credit</span><strong>₱{{ number_format($membership->available_credit, 2) }}</strong></div>
                         <div class="mt-1 flex justify-between gap-4"><span>Unpaid Plan Balance</span><strong>₱{{ number_format($membership->remaining_amount, 2) }}</strong></div>
-                        <p class="mt-2 text-xs text-amber-800">₱50 is deducted from available credit each calendar day, starting the day after the partial payment.</p>
+                        @if($membership->daily_credit_paused_until && $membership->daily_credit_paused_until->toDateString() >= now(config('app.display_timezone', 'Asia/Manila'))->toDateString())
+                            <p class="mt-2 text-xs text-amber-800">Your credit is held while your current membership remains active through {{ $membership->daily_credit_paused_until->format('F j, Y') }}. ₱50 daily deductions begin the next calendar day.</p>
+                        @else
+                            <p class="mt-2 text-xs text-amber-800">₱50 is deducted from available credit each calendar day, starting the day after the partial payment.</p>
+                        @endif
                     </div>
                 @endif
             </div>
@@ -90,7 +94,6 @@
                         <button type="submit" class="w-full whitespace-nowrap px-2 py-2 text-[11px] font-semibold text-white bg-[#E31B23] hover:bg-[#B51219] rounded-lg">Renew Membership</button>
                     </div>
                 </form>
-                <p class="mt-2 text-xs text-[#6B7280]">Enter less than the plan total to start daily ₱50 credit deductions the next calendar day.</p>
             </div>
 
             @if($membership->daily_credit_enabled && ($membership->remaining_amount > 0 || $membership->available_credit <= 0))
@@ -111,7 +114,11 @@
                         </div>
                         <button type="submit" class="px-2 py-2 text-[11px] font-semibold text-white bg-[#E31B23] hover:bg-[#B51219] rounded-lg">Record Payment</button>
                     </form>
-                    <p class="mt-2 text-xs text-[#6B7280]">This payment adds to available credit and reduces the unpaid plan balance. Daily deductions continue.</p>
+                    @if($membership->daily_credit_paused_until && $membership->daily_credit_paused_until->toDateString() >= now(config('app.display_timezone', 'Asia/Manila'))->toDateString())
+                        <p class="mt-2 text-xs text-[#6B7280]">This payment adds to available credit and reduces the unpaid plan balance. Daily deductions are held until {{ $membership->daily_credit_paused_until->format('F j, Y') }}.</p>
+                    @else
+                        <p class="mt-2 text-xs text-[#6B7280]">This payment adds to available credit and reduces the unpaid plan balance. Daily deductions continue.</p>
+                    @endif
                 </div>
             @endif
         </div>

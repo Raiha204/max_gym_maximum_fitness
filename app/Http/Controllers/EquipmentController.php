@@ -19,6 +19,7 @@ class EquipmentController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:100'],
             'status' => ['required', 'in:Operational,Out of Order'],
+            'notes' => ['nullable', 'string', 'max:1000'],
         ]);
         $validated['last_inspected'] = today();
         Equipment::create($validated);
@@ -31,7 +32,8 @@ class EquipmentController extends Controller
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'category' => ['sometimes', 'required', 'string', 'max:100'],
-            'status' => ['required', 'in:Operational,Out of Order'],
+            'status' => ['sometimes', 'required', 'in:Operational,Under Maintenance,Out of Order'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:1000'],
         ]);
         $equipment->update($validated);
         return back()->with('success', 'Equipment updated.');

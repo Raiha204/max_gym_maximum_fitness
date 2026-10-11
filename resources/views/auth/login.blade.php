@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Staff Login — MAX GYM</title>
+    <title>Max Gym Login — MAX GYM</title>
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -38,12 +38,18 @@
             </svg>
             <h1 class="text-2xl font-extrabold text-[#111111]">MAX GYM</h1>
             <p class="text-[10px] font-bold tracking-[0.2em] text-[#E31B23] uppercase">MAXIMUM FITNESS</p>
-            <p class="text-xs text-neutral-500 mt-1.5">Integrated Management System — Staff Login</p>
+            <p class="text-xs text-neutral-500 mt-1.5">Integrated Management System — Max Gym Login</p>
         </div>
 
         @if($errors->any())
             <div class="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 font-semibold">
                 {{ $errors->first() }}
+            </div>
+        @endif
+
+        @if(session('status'))
+            <div class="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 font-semibold">
+                {{ session('status') }}
             </div>
         @endif
 

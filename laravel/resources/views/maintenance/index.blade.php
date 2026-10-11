@@ -76,28 +76,60 @@
                     <h2 class="text-[12px] font-bold text-[#111111]">Reported Equipment Maintenance Log</h2>
                     <p class="text-[9px] text-[#6B7280] mt-0.5">Track reported issues and repair status ({{ $maintenances->count() }} records)</p>
                 </div>
-                <div class="flex gap-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <input id="maintenance-search" type="search" aria-label="Search maintenance reports" oninput="filterMaintenance()" placeholder="Search name, issue, category, or ID..." class="min-w-[220px] flex-1 rounded-lg border border-[#D1D5DB] bg-white px-3 py-2 text-[10px]">
+                    <div class="flex gap-1">
                     @foreach(['All', 'Open', 'In Progress', 'Resolved'] as $status)
                         <button type="button" onclick="filterMaintenance('{{ $status }}')" data-maintenance-filter="{{ $status }}" class="maintenance-filter px-2 py-1.5 rounded-lg border border-[#D1D5DB] text-[9px] font-semibold {{ $status === 'All' ? 'bg-[#E31B23] text-white' : 'bg-white text-[#111111]' }}">{{ $status }}</button>
                     @endforeach
+                    </div>
                 </div>
             </div>
             @forelse($maintenances as $ticket)
-                <div class="maintenance-ticket p-3 rounded-lg bg-[#F9FAFB] border border-[#E5E7EB] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[10px]" data-status="{{ $ticket->status }}">
+                <div class="maintenance-ticket p-3 rounded-lg bg-[#F9FAFB] border border-[#E5E7EB] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-[10px]" data-status="{{ $ticket->status }}" data-search="{{ strtolower(($ticket->equipment_name ?? optional($ticket->equipment)->name ?? 'Equipment') . ' ' . $ticket->issue . ' ' . $ticket->category . ' ' . $ticket->priority . ' ' . $ticket->id) }}">
                     <div>
                         <div class="flex items-center gap-2">
                             <span class="font-bold text-[#111111] text-[11px]">{{ $ticket->equipment_name ?? optional($ticket->equipment)->name ?? 'Equipment' }}</span>
+                            <span class="px-2 py-0.5 rounded bg-[#F3F4F6] border border-[#E5E7EB] text-[9px] font-mono text-[#6B7280]">ID #{{ $ticket->id }}</span>
                             <span class="px-2 py-0.5 rounded bg-white border border-[#E5E7EB] text-[9px] font-semibold text-[#6B7280]">{{ $ticket->priority ?? 'Medium' }} Priority</span>
                         </div>
                         <div class="text-[#111111] mt-1">{{ $ticket->issue }}</div>
-                        <div class="text-[9px] text-[#6B7280] mt-0.5">{{ $ticket->category }} · Reported {{ optional($ticket->reported_at)->format('M j, Y') }} · {{ $ticket->status }}</div>
+                        <div class="text-[9px] text-[#6B7280] mt-0.5">
+                            {{ $ticket->category }} · Reported {{ optional($ticket->reported_at)->format('M j, Y') }} · {{ $ticket->status }}
+                            @if($ticket->status === 'Resolved')
+                                · Completed {{ optional($ticket->resolved_at)->format('M j, Y') ?? '—' }}
+                            @endif
+                        </div>
                     </div>
                     <div class="flex items-center gap-2">
-                        @if($ticket->status !== 'Resolved')
+                        <details class="relative">
+                            <summary class="cursor-pointer list-none px-2.5 py-1.5 rounded border border-[#D1D5DB] bg-white text-[#111111] font-semibold">Edit</summary>
+                            <form method="POST" action="{{ route('maintenance.update', $ticket) }}" class="absolute right-0 z-20 mt-2 w-72 space-y-2 rounded-lg border border-[#E5E7EB] bg-white p-3 shadow-xl">
+                                @csrf
+                                @method('PUT')
+                                <div>
+                                    <label class="block font-semibold text-[#111111] mb-1">Maintenance Name</label>
+                                    <input type="text" name="equipment_name" value="{{ $ticket->equipment_name ?? optional($ticket->equipment)->name ?? 'Equipment' }}" required maxlength="255" class="w-full px-2.5 py-2 rounded border border-[#D1D5DB]">
+                                </div>
+                                <div>
+                                    <label class="block font-semibold text-[#111111] mb-1">Description</label>
+                                    <textarea name="issue" rows="3" required maxlength="500" class="w-full px-2.5 py-2 rounded border border-[#D1D5DB]">{{ $ticket->issue }}</textarea>
+                                </div>
+                                <button type="submit" class="w-full px-3 py-2 rounded bg-[#E31B23] text-white font-semibold">Save Changes</button>
+                            </form>
+                        </details>
+                        @if($ticket->status === 'Open')
+                            <form method="POST" action="{{ route('maintenance.status', $ticket) }}">
+                                @csrf
+                                @method('PATCH')
+                                <input type="hidden" name="status" value="In Progress">
+                                <button type="submit" class="px-3 py-1.5 font-semibold text-[#78350F] bg-amber-100 hover:bg-amber-200 rounded-lg">Mark as In Progress</button>
+                            </form>
+                        @elseif($ticket->status === 'In Progress')
                             <form method="POST" action="{{ route('maintenance.resolve', $ticket) }}">
                                 @csrf
                                 @method('PATCH')
-                                <button type="submit" class="px-3 py-1.5 font-semibold text-white bg-[#E31B23] hover:bg-[#B51219] rounded-lg">Mark Resolved</button>
+                                <button type="submit" class="px-3 py-1.5 font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg">Mark Resolved</button>
                             </form>
                         @else
                             <span class="px-2.5 py-1 rounded bg-[#DCFCE7] text-[#166534] font-bold">✓ Resolved</span>
@@ -110,8 +142,11 @@
                     </div>
                 </div>
             @empty
-                <div class="text-[10px] text-[#6B7280] py-8 text-center">No equipment maintenance reports found. Use the form to report an issue.</div>
+                <div class="text-[10px] text-[#6B7280] py-8 text-center">No maintenance reports found. Use the form to report an issue.</div>
             @endforelse
+            @if($maintenances->isNotEmpty())
+                <div id="maintenance-search-empty" class="hidden py-8 text-center text-[10px] text-[#6B7280]">No maintenance reports match your search and selected status.</div>
+            @endif
         </div>
     </div>
 </div>
@@ -143,6 +178,7 @@
     </div>
 </div>
 <script>
+    let activeMaintenanceFilter = 'All';
     let pendingMaintenanceDeleteForm = null;
     let maintenanceDeleteTrigger = null;
 
@@ -183,15 +219,25 @@
     }
 
     function filterMaintenance(status) {
+        if (status !== undefined) {
+            activeMaintenanceFilter = status;
+        }
+        const query = document.getElementById('maintenance-search').value.trim().toLowerCase();
+        let visibleCount = 0;
         document.querySelectorAll('.maintenance-ticket').forEach((ticket) => {
-            ticket.classList.toggle('hidden', status !== 'All' && ticket.dataset.status !== status);
+            const matchesStatus = activeMaintenanceFilter === 'All' || ticket.dataset.status === activeMaintenanceFilter;
+            const matchesSearch = ticket.dataset.search.includes(query);
+            const visible = matchesStatus && matchesSearch;
+            ticket.classList.toggle('hidden', !visible);
+            if (visible) visibleCount++;
         });
         document.querySelectorAll('.maintenance-filter').forEach((button) => {
-            const selected = button.dataset.maintenanceFilter === status;
+            const selected = button.dataset.maintenanceFilter === activeMaintenanceFilter;
             button.classList.toggle('bg-[#E31B23]', selected);
             button.classList.toggle('text-white', selected);
             button.classList.toggle('bg-white', !selected);
         });
+        document.getElementById('maintenance-search-empty')?.classList.toggle('hidden', visibleCount > 0);
     }
 
     document.addEventListener('DOMContentLoaded', () => {

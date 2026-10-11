@@ -62,8 +62,9 @@ class AttendanceController extends Controller
                 'full_name' => $member->full_name,
                 'membership_type' => $member->plan_type,
                 'status' => $member->membership_status,
-                'can_check_in' => in_array($member->membership_status, ['Active', 'Partial'], true),
+                'can_check_in' => $member->can_check_in,
                 'available_credit' => $member->daily_credit_enabled ? $member->available_credit : null,
+                'has_daily_credit' => (bool) $member->daily_credit_enabled,
             ]);
 
         return response()->json(['members' => $members]);
@@ -129,8 +130,12 @@ class AttendanceController extends Controller
             'date_of_birth' => optional($member->date_of_birth)->format('d/m/Y') ?? '—',
             'membership_type' => $member->plan_type,
             'status' => $member->membership_status,
-            'can_check_in' => in_array($member->membership_status, ['Active', 'Partial'], true),
+            'can_check_in' => $member->can_check_in,
             'available_credit' => $member->daily_credit_enabled ? $member->available_credit : null,
+            'has_daily_credit' => (bool) $member->daily_credit_enabled,
+            'credit_is_paused' => $member->daily_credit_paused_until
+                && $member->daily_credit_paused_until->toDateString() >= Carbon::now($displayTimezone)->toDateString(),
+            'credit_paused_until' => optional($member->daily_credit_paused_until)->format('F j, Y'),
             'start_date' => optional($member->start_date)->format('F j, Y') ?? '—',
             'expiration_date' => optional($member->end_date)->format('F j, Y') ?? '—',
             'days_remaining' => $member->days_remaining,
@@ -164,7 +169,7 @@ class AttendanceController extends Controller
         $result = DB::transaction(function () use ($membershipId, $validated) {
             $member = Membership::whereKey($membershipId)->lockForUpdate()->firstOrFail();
 
-            if (!in_array($member->membership_status, ['Active', 'Partial'], true)) {
+            if (!$member->can_check_in) {
                 return ['status' => 'expired', 'member' => $member];
             }
 

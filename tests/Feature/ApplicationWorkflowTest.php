@@ -23,11 +23,15 @@ class ApplicationWorkflowTest extends TestCase
     {
         $user = User::factory()->create();
 
+        $loginResponse = $this->get(route('login'))->assertOk();
+        $this->assertStringContainsString('no-store', $loginResponse->headers->get('Cache-Control'));
+
         $this->post(route('login.post'), [
             'email' => $user->email,
             'password' => 'password',
         ])->assertRedirect(route('dashboard'));
         $this->assertAuthenticatedAs($user);
+        $this->get(route('login'))->assertRedirect(route('dashboard'));
 
         $this->post(route('logout'))->assertRedirect(route('login'));
         $this->assertGuest();
@@ -62,6 +66,7 @@ class ApplicationWorkflowTest extends TestCase
             route('memberships.show', $membership),
             route('memberships.edit', $membership),
             route('walk-ins.index'),
+            route('payments.index'),
             route('reports.index'),
             route('equipment.index'),
             route('maintenance.index'),
@@ -70,6 +75,24 @@ class ApplicationWorkflowTest extends TestCase
         foreach ($urls as $url) {
             $this->get($url)->assertOk();
         }
+        $this->get(route('payments.index', ['method' => 'Cash', 'date' => '2026-10-08']))
+            ->assertOk()
+            ->assertSee('Specific Date Lookup')
+            ->assertSee('Membership Payments Ledger');
+        $this->get(route('equipment.index'))
+            ->assertOk()
+            ->assertSee('ID #' . $equipment->id)
+            ->assertSee('Equipment Name', false)
+            ->assertSee('id="equipment-search"', false)
+            ->assertSee('description, or ID', false)
+            ->assertSee('Optional equipment details');
+        $this->get(route('maintenance.index'))
+            ->assertOk()
+            ->assertSee('ID #' . $maintenance->id)
+            ->assertSee('id="maintenance-search"', false)
+            ->assertSee('data-search="test treadmill test maintenance issue', false)
+            ->assertSee('Maintenance Name')
+            ->assertSee('Description');
 
         $this->get(route('attendance.search', ['q' => 'Member']))
             ->assertOk()
@@ -133,6 +156,63 @@ class ApplicationWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_partial_renewal_holds_credit_until_existing_membership_expires(): void
+    {
+        $this->actingAs(User::factory()->create());
+        Carbon::setTestNow(Carbon::parse('2026-10-08 12:00:00', 'UTC'));
+
+        try {
+            $membership = $this->createMembership([
+                'start_date' => '2026-09-18',
+                'end_date' => '2026-10-18',
+            ]);
+            Payment::create([
+                'membership_id' => $membership->id,
+                'payer_name' => $membership->full_name,
+                'category' => 'Membership Registration',
+                'plan_label' => 'Student Membership (1 Month)',
+                'amount' => 650,
+                'payment_method' => 'Cash',
+                'paid_at' => Carbon::parse('2026-10-08 11:00:00', 'UTC'),
+            ]);
+
+            $this->post(route('memberships.renew', $membership), [
+                'plan_type' => 'Student Membership',
+                'duration_months' => 1,
+                'amount_paid' => 600,
+                'payment_method' => 'Cash',
+            ])->assertRedirect(route('memberships.show', $membership));
+
+            $membership = $membership->fresh();
+            $this->assertSame('2026-10-18', $membership->daily_credit_paused_until->toDateString());
+            $this->assertSame('2026-11-18', $membership->end_date->toDateString());
+            $this->assertSame('Partial', $membership->membership_status);
+            $this->assertTrue($membership->can_check_in);
+            $this->get(route('attendance.verify', ['q' => $membership->member_id]))
+                ->assertOk()
+                ->assertJsonPath('status', 'Partial')
+                ->assertJsonPath('can_check_in', true);
+            $this->post(route('attendance.store'), [
+                'member_id' => $membership->member_id,
+                'verification_method' => 'Manual Search',
+            ])->assertRedirect(route('attendance.index', ['member_id' => $membership->member_id]));
+
+            Carbon::setTestNow(Carbon::parse('2026-10-18 12:00:00', 'UTC'));
+            $this->assertSame(600.0, $membership->fresh()->available_credit);
+            $this->assertSame('Partial', $membership->fresh()->membership_status);
+            $this->get(route('memberships.show', $membership))
+                ->assertOk()
+                ->assertSee('credit is held')
+                ->assertSee('October 18, 2026');
+
+            Carbon::setTestNow(Carbon::parse('2026-10-19 12:00:00', 'UTC'));
+            $this->assertSame(550.0, $membership->fresh()->available_credit);
+            $this->assertSame('Partial', $membership->fresh()->membership_status);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     public function test_partial_membership_payment_uses_daily_credit_and_accepts_balance_payment(): void
     {
         $this->actingAs(User::factory()->create());
@@ -156,6 +236,13 @@ class ApplicationWorkflowTest extends TestCase
             $this->assertTrue($membership->daily_credit_enabled);
             $this->assertSame(50.0, $membership->remaining_amount);
             $this->assertSame(600.0, $membership->available_credit);
+            $this->assertSame('Partial', $membership->membership_status);
+            $this->assertDatabaseHas('payments', [
+                'membership_id' => $membership->id,
+                'category' => 'Partial Payment',
+                'plan_label' => 'Student Membership (1 Month)',
+                'amount' => 600,
+            ]);
 
             Carbon::setTestNow(Carbon::parse('2026-10-09 12:00:00', 'UTC'));
             $membership = $membership->fresh();
@@ -166,7 +253,9 @@ class ApplicationWorkflowTest extends TestCase
                 ->assertSee('Partial')
                 ->assertSee('Available Credit')
                 ->assertSee('₱550.00')
-                ->assertSee('₱50.00');
+                ->assertSee('₱50.00')
+                ->assertSee('Partial Payment')
+                ->assertSee('Student Membership (1 Month)');
             $this->get(route('memberships.index', ['status' => 'partial']))
                 ->assertOk()
                 ->assertSee($membership->member_id);
@@ -187,6 +276,11 @@ class ApplicationWorkflowTest extends TestCase
             $membership = $membership->fresh();
             $this->assertSame(0.0, $membership->remaining_amount);
             $this->assertSame(600.0, $membership->available_credit);
+            $this->assertSame('Active', $membership->membership_status);
+            $this->get(route('memberships.show', $membership))
+                ->assertOk()
+                ->assertDontSee('Available Credit')
+                ->assertDontSee('Unpaid Plan Balance');
             $this->assertDatabaseHas('payments', [
                 'membership_id' => $membership->id,
                 'category' => 'Membership Balance Payment',
@@ -295,6 +389,133 @@ class ApplicationWorkflowTest extends TestCase
             ->assertDontSee('650.00');
     }
 
+    public function test_revenue_ledger_search_filters_sorting_and_pagination_work(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $membership = $this->createMembership([
+            'member_id' => '765432',
+            'full_name' => 'Ledger, Member',
+        ]);
+
+        for ($i = 1; $i <= 32; $i++) {
+            Payment::create([
+                'membership_id' => $membership->id,
+                'payer_name' => $i === 32 ? 'Special Search Member' : 'Ledger Member',
+                'category' => 'Membership Registration',
+                'plan_label' => 'Student Membership (1 Month)',
+                'amount' => $i,
+                'payment_method' => $i === 32 ? 'GCash' : 'Cash',
+                'paid_at' => Carbon::parse('2026-10-08 01:00:00', 'UTC')->addMinutes($i),
+            ]);
+        }
+
+        foreach ([['WALK-001', 'Cash', 5], ['WALK-002', 'GCash', 40], ['WALK-003', 'Cash', 60]] as [$receipt, $method, $amount]) {
+            WalkIn::create([
+                'receipt_no' => $receipt,
+                'first_name' => 'Walk',
+                'last_name' => 'Customer',
+                'session_type' => 'Regular Walk-In',
+                'amount' => $amount,
+                'payment_method' => $method,
+                'paid_at' => Carbon::parse('2026-10-08 04:00:00', 'UTC'),
+            ]);
+        }
+
+        $defaultPage = $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+            'payment_method' => 'GCash',
+            'source' => 'Walk-In',
+        ]))
+            ->assertOk()
+            ->assertSee('Showing 1 to 1 of 1 entries')
+            ->assertSee('name="rows"', false);
+
+        $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+        ]))
+            ->assertOk()
+            ->assertSee('Showing 1 to 10 of 35 entries');
+
+        $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+            'rows' => 100,
+        ]))
+            ->assertOk()
+            ->assertSee('Showing 1 to 35 of 35 entries');
+
+        $firstPage = $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+            'rows' => 30,
+            'payment_method' => 'All',
+            'source' => 'All',
+            'sort' => 'date_asc',
+        ]))
+            ->assertOk()
+            ->assertSee('Showing 1 to 30 of 35 entries')
+            ->assertSee('data-ledger-key="payment-1"', false)
+            ->assertDontSee('data-ledger-key="payment-32"', false);
+        $this->assertStringContainsString('page=2', $firstPage->getContent());
+
+        $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+            'rows' => 30,
+            'payment_method' => 'All',
+            'source' => 'All',
+            'sort' => 'date_asc',
+            'page' => 2,
+        ]))
+            ->assertOk()
+            ->assertSee('Showing 31 to 35 of 35 entries')
+            ->assertSee('data-ledger-key="payment-32"', false);
+
+        $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+            'search' => 'Special Search',
+            'source' => 'Membership',
+        ]))
+            ->assertOk()
+            ->assertSee('Special Search Member')
+            ->assertSee('Showing 1 to 1 of 1 entries');
+
+        $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+            'search' => '765432',
+            'payment_method' => 'GCash',
+            'source' => 'Membership',
+        ]))
+            ->assertOk()
+            ->assertSee('Special Search Member')
+            ->assertSee('Showing 1 to 1 of 1 entries')
+            ->assertDontSee('WALK-002');
+
+        $amountSortedResponse = $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+            'sort' => 'amount_asc',
+        ]))->assertOk();
+        $amountSortedHtml = $amountSortedResponse->getContent();
+        $this->assertLessThan(
+            strpos($amountSortedHtml, 'data-ledger-key="walk-in-1"'),
+            strpos($amountSortedHtml, 'data-ledger-key="payment-1"')
+        );
+
+        $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+            'source' => 'Walk-In',
+            'payment_method' => 'GCash',
+        ]))
+            ->assertOk()
+            ->assertSee('Showing 1 to 1 of 1 entries');
+    }
+
     public function test_membership_phone_number_requires_exactly_eleven_digits(): void
     {
         $this->actingAs(User::factory()->create());
@@ -311,6 +532,120 @@ class ApplicationWorkflowTest extends TestCase
             'amount_paid' => 650,
             'payment_method' => 'Cash',
         ])->assertSessionHasErrors('phone');
+    }
+
+    public function test_revenue_ledger_search_matches_membership_and_walk_in_names(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $membership = $this->createMembership([
+            'member_id' => '246810',
+            'full_name' => 'Gilbuena, Carl Adrian G.',
+        ]);
+
+        Payment::create([
+            'membership_id' => $membership->id,
+            'payer_name' => 'Carl Adrian G. Gilbuena',
+            'category' => 'Membership Registration',
+            'plan_label' => 'Student Membership (1 Month)',
+            'amount' => 650,
+            'payment_method' => 'Cash',
+            'paid_at' => Carbon::parse('2026-10-08 04:00:00', 'UTC'),
+        ]);
+        WalkIn::create([
+            'receipt_no' => 'WALK-CARL-001',
+            'first_name' => 'Carl Adrian G.',
+            'last_name' => 'Walk-In',
+            'session_type' => 'Regular Walk-In',
+            'amount' => 65,
+            'payment_method' => 'Cash',
+            'paid_at' => Carbon::parse('2026-10-08 04:00:00', 'UTC'),
+        ]);
+
+        $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+            'search' => 'Carl Adrian G. Gilbuena',
+            'source' => 'Membership',
+        ]))
+            ->assertOk()
+            ->assertSee('Gilbuena, Carl Adrian G.')
+            ->assertSee('Showing 1 to 1 of 1 entries');
+
+        $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+            'search' => 'Carl Adrian G.',
+            'source' => 'Walk-In',
+        ]))
+            ->assertOk()
+            ->assertSee('Carl Adrian G. Walk-In')
+            ->assertSee('Showing 1 to 1 of 1 entries');
+
+        $this->get(route('reports.index', [
+            'period' => 'date',
+            'date' => '2026-10-08',
+        ]))
+            ->assertOk()
+            ->assertDontSee('>Apply</button>', false)
+            ->assertSee("params.set('q', query)", false)
+            ->assertSee('Select one to view.', false)
+            ->assertSee("select.addEventListener('change', () => form.requestSubmit())", false);
+    }
+
+    public function test_member_and_revenue_search_suggestions_match_names_and_ids(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $membership = $this->createMembership([
+            'member_id' => '62884',
+            'full_name' => 'Gilbuena, Carl Adrian G.',
+        ]);
+        Payment::create([
+            'membership_id' => $membership->id,
+            'payer_name' => 'Carl Adrian G. Gilbuena',
+            'category' => 'Membership Registration',
+            'plan_label' => 'Student Membership (1 Month)',
+            'amount' => 650,
+            'payment_method' => 'Cash',
+            'paid_at' => Carbon::parse('2026-10-08 04:00:00', 'UTC'),
+        ]);
+        WalkIn::create([
+            'receipt_no' => 'WALK-CARL-001',
+            'first_name' => 'Carl Adrian',
+            'last_name' => 'Guest',
+            'session_type' => 'Regular Walk-In',
+            'amount' => 65,
+            'payment_method' => 'Cash',
+            'paid_at' => Carbon::parse('2026-10-08 04:00:00', 'UTC'),
+        ]);
+
+        $this->getJson(route('memberships.search', ['q' => 'Carl Adrian G. Gilbuena']))
+            ->assertOk()
+            ->assertJsonPath('members.0.member_id', '62884')
+            ->assertJsonPath('members.0.full_name', 'Gilbuena, Carl Adrian G.');
+
+        $this->get(route('memberships.index', ['search' => 'Carl Adrian G. Gilbuena']))
+            ->assertOk()
+            ->assertSee('62884')
+            ->assertSee('Gilbuena')
+            ->assertSee('Carl Adrian G.');
+
+        $this->getJson(route('reports.search', [
+            'q' => 'Carl Adrian G. Gilbuena',
+            'period' => 'date',
+            'date' => '2026-10-08',
+        ]))
+            ->assertOk()
+            ->assertJsonPath('matches.0.identifier', '62884')
+            ->assertJsonPath('matches.0.search_value', '62884');
+
+        $this->getJson(route('reports.search', [
+            'q' => 'Carl Adrian Guest',
+            'period' => 'date',
+            'date' => '2026-10-08',
+        ]))
+            ->assertOk()
+            ->assertJsonPath('matches.0.identifier', 'WALK-CARL-001')
+            ->assertJsonPath('matches.0.search_value', 'WALK-CARL-001');
     }
 
     public function test_membership_registration_payment_time_displays_in_manila_time(): void
@@ -485,8 +820,20 @@ class ApplicationWorkflowTest extends TestCase
             'name' => 'Workflow test equipment',
             'category' => 'Cardio',
             'status' => 'Operational',
+            'notes' => 'Original equipment description',
         ])->assertRedirect();
         $equipment = Equipment::where('name', 'Workflow test equipment')->firstOrFail();
+        $this->assertSame('Original equipment description', $equipment->notes);
+
+        $this->put(route('equipment.update', $equipment), [
+            'name' => 'Updated workflow equipment',
+            'notes' => 'Updated equipment description',
+        ])->assertRedirect();
+        $equipment->refresh();
+        $this->assertSame('Updated workflow equipment', $equipment->name);
+        $this->assertSame('Updated equipment description', $equipment->notes);
+        $this->assertSame('Cardio', $equipment->category);
+        $this->assertSame('Operational', $equipment->status);
 
         $this->post(route('maintenance.store'), [
             'equipment_id' => (string) $equipment->id,
@@ -498,16 +845,67 @@ class ApplicationWorkflowTest extends TestCase
         $maintenance = Maintenance::where('equipment_id', $equipment->id)->firstOrFail();
         $this->assertSame('Under Maintenance', $equipment->fresh()->status);
 
+        $this->put(route('maintenance.update', $maintenance), [
+            'equipment_name' => 'Updated maintenance name',
+            'issue' => 'Updated maintenance description',
+        ])->assertRedirect();
+        $maintenance->refresh();
+        $this->assertSame('Updated maintenance name', $maintenance->equipment_name);
+        $this->assertSame('Updated maintenance description', $maintenance->issue);
+        $this->assertSame('Open', $maintenance->status);
+
         $this->patch(route('maintenance.status', $maintenance), [
             'status' => 'In Progress',
         ])->assertRedirect();
         $this->assertSame('In Progress', $maintenance->fresh()->status);
+        $this->get(route('maintenance.index'))
+            ->assertOk()
+            ->assertSee('Mark Resolved');
+
+        $this->post(route('maintenance.store'), [
+            'equipment_id' => (string) $equipment->id,
+            'custom_equipment_name' => '',
+            'category' => 'Cardio',
+            'priority' => 'Medium',
+            'issue' => 'Second workflow issue',
+        ])->assertRedirect();
+        $secondMaintenance = Maintenance::where('issue', 'Second workflow issue')->firstOrFail();
+
+        $this->patch(route('maintenance.status', $maintenance), [
+            'status' => 'Resolved',
+        ])->assertRedirect();
+        $this->assertSame('Resolved', $maintenance->fresh()->status);
+        $this->assertNotNull($maintenance->fresh()->resolved_at);
+        $this->assertSame('Under Maintenance', $equipment->fresh()->status);
+        $this->get(route('maintenance.index'))
+            ->assertOk()
+            ->assertSee('Mark as In Progress')
+            ->assertSee('data-maintenance-filter="Resolved"', false)
+            ->assertSee('data-status="Resolved"', false)
+            ->assertSee('Reported')
+            ->assertSee('Completed')
+            ->assertSee('Updated maintenance description')
+            ->assertSee('Updated maintenance name')
+            ->assertSee($maintenance->fresh()->resolved_at->format('M j, Y'));
+
+        $this->patch(route('maintenance.status', $maintenance), [
+            'status' => 'In Progress',
+        ])->assertRedirect();
+        $this->assertNull($maintenance->fresh()->resolved_at);
+        $this->assertSame('Under Maintenance', $equipment->fresh()->status);
 
         $this->patch(route('maintenance.resolve', $maintenance))->assertRedirect();
         $this->assertSame('Resolved', $maintenance->fresh()->status);
+        $this->assertNotNull($maintenance->fresh()->resolved_at);
+        $this->assertSame('Under Maintenance', $equipment->fresh()->status);
+
+        $this->patch(route('maintenance.status', $secondMaintenance), [
+            'status' => 'Resolved',
+        ])->assertRedirect();
         $this->assertSame('Operational', $equipment->fresh()->status);
 
         $this->delete(route('maintenance.destroy', $maintenance))->assertRedirect();
+        $this->delete(route('maintenance.destroy', $secondMaintenance))->assertRedirect();
         $this->put(route('equipment.update', $equipment), [
             'status' => 'Out of Order',
         ])->assertRedirect();

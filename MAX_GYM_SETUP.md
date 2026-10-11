@@ -9,17 +9,21 @@ This folder contains the complete, ready-to-run **MAX Gym Integrated Management 
 
 ## Manual Quick Start
 
-```bash
-cd max-gym-maximum-fitness
+Create a MySQL database named `max_gym_maximum_fitness` (for example, in
+phpMyAdmin) and set `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and
+`DB_PASSWORD` in `.env` to match your MySQL server. The supplied defaults are
+for a local XAMPP MySQL installation.
+
+```powershell
 composer install
-cp .env.example .env
 php artisan key:generate
-touch database/database.sqlite
-php artisan migrate:fresh --seed
+php artisan migrate --seed
 php artisan serve
 ```
 
-Then open **http://127.0.0.1:8000** in your browser.
+Then open **http://127.0.0.1:8000** in your browser. Migrations do not copy
+records from the old SQLite database. The startup scripts use non-destructive
+migrations; do not use `migrate:fresh` on a database containing data you need.
 Member photos are served through an authenticated application route, so a
 public storage symlink is not required.
 

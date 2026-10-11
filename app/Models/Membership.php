@@ -30,6 +30,7 @@ class Membership extends Model
         'remaining_amount',
         'daily_credit_enabled',
         'daily_credit_started_at',
+        'daily_credit_paused_until',
         'payment_method',
         'start_date',
         'end_date',
@@ -46,6 +47,7 @@ class Membership extends Model
         'remaining_amount' => 'float',
         'daily_credit_enabled' => 'boolean',
         'daily_credit_started_at' => 'datetime',
+        'daily_credit_paused_until' => 'date',
     ];
 
     public static function generateMemberId(): string
@@ -86,11 +88,24 @@ class Membership extends Model
             return 'Expired';
         }
 
+        $today = Carbon::today(config('app.display_timezone', 'Asia/Manila'))->toDateString();
         if (!$this->daily_credit_enabled) {
             return 'Active';
         }
 
-        return $this->available_credit > 0 ? 'Partial' : 'Expired';
+        if ($this->remaining_amount > 0) {
+            $creditIsPaused = $this->daily_credit_paused_until
+                && $this->daily_credit_paused_until->toDateString() >= $today;
+
+            return $creditIsPaused || $this->available_credit > 0 ? 'Partial' : 'Expired';
+        }
+
+        return $this->available_credit > 0 ? 'Active' : 'Expired';
+    }
+
+    public function getCanCheckInAttribute(): bool
+    {
+        return in_array($this->membership_status, ['Active', 'Partial'], true);
     }
 
     public function getAvailableCreditAttribute(): float
@@ -102,6 +117,16 @@ class Membership extends Model
         $timezone = config('app.display_timezone', 'Asia/Manila');
         $startDate = $this->daily_credit_started_at->copy()->setTimezone($timezone)->startOfDay();
         $today = Carbon::now($timezone)->startOfDay();
+        $pauseUntil = $this->daily_credit_paused_until
+            ? Carbon::parse($this->daily_credit_paused_until->toDateString(), $timezone)->startOfDay()
+            : null;
+        $daysToCharge = static function (Carbon $from, Carbon $to) use ($pauseUntil): int {
+            if ($pauseUntil && $from->lt($pauseUntil)) {
+                $from = $pauseUntil->copy();
+            }
+
+            return $to->gt($from) ? (int) $from->diffInDays($to) : 0;
+        };
         $payments = $this->relationLoaded('payments')
             ? $this->payments
                 ->where('paid_at', '>=', $this->daily_credit_started_at)
@@ -118,23 +143,20 @@ class Membership extends Model
         $lastChargedDay = $startDate;
         foreach ($paymentsByDay as $date => $dayPayments) {
             $paymentDay = Carbon::parse($date, $timezone)->startOfDay();
-            $daysToCharge = $lastChargedDay->diffInDays($paymentDay);
-            $credit = max(0, $credit - (self::DAILY_CREDIT_DEDUCTION * $daysToCharge));
+            $chargeDays = $daysToCharge($lastChargedDay, $paymentDay);
+            $credit = max(0, $credit - (self::DAILY_CREDIT_DEDUCTION * $chargeDays));
             $credit += $dayPayments->sum('amount');
             $lastChargedDay = $paymentDay;
         }
 
-        $daysToCharge = $lastChargedDay->diffInDays($today);
-        return round(max(0, $credit - (self::DAILY_CREDIT_DEDUCTION * $daysToCharge)), 2);
+        $chargeDays = $daysToCharge($lastChargedDay, $today);
+        return round(max(0, $credit - (self::DAILY_CREDIT_DEDUCTION * $chargeDays)), 2);
     }
 
     public function getDisplayStatusAttribute(): string
     {
         if ($this->membership_status === 'Expired') {
             return 'expired';
-        }
-        if ($this->membership_status === 'Partial') {
-            return 'partial';
         }
         if ($this->days_remaining <= 7) {
             return 'expiring';

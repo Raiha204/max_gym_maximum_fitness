@@ -23,7 +23,7 @@
             <div class="text-[10px] text-[#6B7280] mt-1">Prepaid & valid</div>
         </div>
         <div class="bg-white rounded-xl border border-[#E5E7EB] border-t-2 border-t-amber-500 p-3.5 shadow-sm">
-            <div class="text-[11px] text-[#6B7280] font-semibold">Partial Memberships</div>
+            <div class="text-[11px] text-[#6B7280] font-semibold">Daily Credit Memberships</div>
             <div class="text-xl font-mono font-bold text-[#111111] mt-1">{{ $partialCount }}</div>
             <div class="text-[10px] text-[#6B7280] mt-1">Credit decreases by ₱50 daily</div>
         </div>
@@ -116,7 +116,7 @@
                             <tr>
                                 <td class="px-3 py-2.5"><div class="font-semibold">{{ $member->full_name }}</div><div class="font-mono text-[#E31B23] mt-0.5">ID: {{ $member->member_id }}</div></td>
                                 <td class="px-3 py-2.5 text-[#6B7280]">{{ $member->plan_type }}</td>
-                                <td class="px-3 py-2.5"><span class="px-2 py-1 rounded {{ $member->membership_status === 'Active' ? 'bg-emerald-100 text-emerald-800' : ($member->membership_status === 'Partial' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-700') }} font-bold">{{ $member->membership_status }}</span></td>
+                                <td class="px-3 py-2.5"><span class="px-2 py-1 rounded {{ $member->membership_status === 'Active' ? 'bg-emerald-100 text-emerald-800' : ($member->membership_status === 'Partial' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700') }} font-bold">{{ $member->membership_status }}</span></td>
                                 <td class="px-3 py-2.5 text-[#6B7280]">{{ optional($member->end_date)->format('F j, Y') }}</td>
                                 <td class="px-3 py-2.5 text-right font-mono font-semibold">{{ $member->days_remaining }} days</td>
                             </tr>

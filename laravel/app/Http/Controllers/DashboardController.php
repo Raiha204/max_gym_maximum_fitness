@@ -19,7 +19,7 @@ class DashboardController extends Controller
 
         $memberships = Membership::latest()->get();
         $activeCount = $memberships->where('membership_status', 'Active')->count();
-        $partialCount = $memberships->where('membership_status', 'Partial')->count();
+        $partialCount = $memberships->where('daily_credit_enabled', true)->count();
         $expiringCount = $memberships->where('display_status', 'expiring')->count();
         $expiredCount = $memberships->where('membership_status', 'Expired')->count();
 

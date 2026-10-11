@@ -75,18 +75,17 @@
         @media (min-width: 768px) { .gym-sidebar { width: 15rem !important; } .gym-sidebar nav a { font-size: 14px !important; padding-top: 12px; padding-bottom: 12px; } }
         header .text-\[11px\] { font-size: 13.5px !important; }
 
-        /* ===== Motion: blur-in on page load + press feedback ===== */
-        @keyframes blurIn { from { opacity: 0; filter: blur(14px); transform: translateY(18px) scale(.985); } to { opacity: 1; filter: blur(0); transform: none; } }
-        main > div > *, main > div > .grid > *, main > div > section > .grid > * { animation: blurIn .7s cubic-bezier(.2,.7,.2,1) both; }
-        main > div > *:nth-child(2) { animation-delay: .06s; } main > div > *:nth-child(3) { animation-delay: .12s; }
-        main > div > *:nth-child(4) { animation-delay: .18s; } main > div > *:nth-child(5) { animation-delay: .24s; }
-        main > div > *:nth-child(n+6) { animation-delay: .3s; }
-        main > div > .grid > *:nth-child(2) { animation-delay: .14s; } main > div > .grid > *:nth-child(3) { animation-delay: .2s; }
-        main > div > .grid > *:nth-child(4) { animation-delay: .26s; } main > div > .grid > *:nth-child(5) { animation-delay: .32s; }
-        .equipment-category { animation: blurIn .5s cubic-bezier(.2,.7,.2,1) both; }
-        main button, main a[class*="rounded"] { transition: transform .15s ease, box-shadow .2s ease, background-color .2s ease, filter .2s ease; }
-        main button:not(:disabled):hover, main a[class*="rounded-lg"]:hover { transform: translateY(-1px); }
-        main button:not(:disabled):active, main a[class*="rounded-lg"]:active { transform: scale(.97); }
+        /* ===== Simple interaction feedback without page blur animations ===== */
+        main button, main a[class*="rounded"] { transition: box-shadow .2s ease, background-color .2s ease, border-color .2s ease; }
+        .gym-sidebar nav a { transition: background-color .16s ease, color .16s ease; }
+        .gym-sidebar nav a:active { filter: none; transform: none; }
+        .gym-primary { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 44px; padding: .7rem 1.2rem; border: 1px solid transparent; border-radius: .6rem; background: #E31B23 !important; color: #fff !important; font-size: .875rem; font-weight: 700; box-shadow: 0 6px 16px -8px rgba(227,27,35,.8); transition: background-color .15s ease, box-shadow .15s ease; }
+        .gym-primary:hover { background: #c8151c !important; box-shadow: 0 8px 18px -8px rgba(227,27,35,.65); }
+        .gym-primary:active { filter: none; transform: none; }
+        .gym-primary:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(227,27,35,.25); }
+        .dashboard-page > section.bg-white, .dashboard-page > div.bg-white { border-radius: .8rem; box-shadow: 0 2px 8px rgba(17,17,17,.045), 0 12px 26px -20px rgba(17,17,17,.22); }
+        .dashboard-page > section[aria-label="Gym overview"] > div { transition: box-shadow .18s ease, border-color .18s ease; }
+        .dashboard-page > section[aria-label="Gym overview"] > div:hover { border-color: #d1d5db; box-shadow: 0 8px 18px -14px rgba(17,17,17,.4); }
         @media (prefers-reduced-motion: reduce) { main *, .mg-modal * { animation: none !important; transition: none !important; } }
 
         /* ===== Selectable option buttons (walk-in type / payment) ===== */
@@ -94,7 +93,6 @@
         .choice.choice-sm { min-height: 52px; align-items: center; text-align: center; }
         .choice:hover { border-color: #111; box-shadow: 0 10px 20px -12px rgba(17,17,17,.5); }
         .choice[aria-pressed="true"] { background: #E31B23; border-color: #E31B23; color: #fff; box-shadow: 0 12px 24px -12px rgba(227,27,35,.8); }
-        .choice[aria-pressed="true"]::after { content: '\2713'; position: absolute; top: 10px; right: 14px; font-weight: 800; font-size: 14px; }
         .choice-title { font-size: 15px; font-weight: 700; }
         .choice-sub { font-size: 13px; font-family: 'IBM Plex Mono', monospace; color: #E31B23; font-weight: 600; }
         .choice[aria-pressed="true"] .choice-sub { color: #fff; }
@@ -130,7 +128,7 @@
         .mg-dialog-foot { display: flex; justify-content: flex-end; padding: 0 28px 24px; }
         .mg-ok { min-width: 110px; padding: 11px 26px; border-radius: 10px; background: #E31B23; color: #fff; font-weight: 700; font-size: 15px; box-shadow: 0 10px 20px -10px rgba(227,27,35,.8); }
         .mg-ok:hover { background: #c4151c; } .mg-ok:active { transform: scale(.96); } .mg-ok:focus-visible { outline: 3px solid #111; outline-offset: 2px; }
-        .mg-toast { pointer-events: none; position: fixed; right: 28px; bottom: 28px; z-index: 90; display: flex; gap: 12px; align-items: center; padding: 14px 20px; background: #111; color: #fff; border-left: 4px solid #22c55e; border-radius: 12px; font-size: 14px; font-weight: 600; box-shadow: 0 20px 40px -16px rgba(0,0,0,.6); animation: blurIn .5s both, mgOut .4s 3.6s both; }
+        .mg-toast { pointer-events: none; position: fixed; right: 28px; bottom: 28px; z-index: 90; display: flex; gap: 12px; align-items: center; padding: 14px 20px; background: #111; color: #fff; border-left: 4px solid #22c55e; border-radius: 12px; font-size: 14px; font-weight: 600; box-shadow: 0 20px 40px -16px rgba(0,0,0,.6); animation: mgFade .25s ease both, mgOut .4s 3.6s both; }
         @keyframes mgFade { from { opacity: 0; } to { opacity: 1; } }
         @keyframes mgPop { from { opacity: 0; transform: scale(.85) translateY(20px); } to { opacity: 1; transform: none; } }
         @keyframes mgDraw { to { stroke-dashoffset: 0; } }
@@ -186,6 +184,10 @@
                 <a href="{{ route('walk-ins.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold {{ request()->routeIs('walk-ins.*') ? 'bg-[#E31B23] text-white' : 'text-[#D1D5DB] hover:text-white hover:bg-[#2A2A2A]' }}">
                     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
                     <span>Walk-In</span>
+                </a>
+                <a href="{{ route('payments.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold {{ request()->routeIs('payments.index') ? 'bg-[#E31B23] text-white' : 'text-[#D1D5DB] hover:text-white hover:bg-[#2A2A2A]' }}">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                    <span>Payments</span>
                 </a>
                 <a href="{{ route('reports.index') }}" class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold {{ request()->routeIs('reports.*') ? 'bg-[#E31B23] text-white' : 'text-[#D1D5DB] hover:text-white hover:bg-[#2A2A2A]' }}">
                     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>

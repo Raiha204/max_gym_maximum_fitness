@@ -261,8 +261,8 @@
             .map((id) => document.getElementById(id));
         const memberId = document.getElementById('form-member-id').value;
         const status = document.getElementById('ver-status').dataset.status;
-        const isPartial = status === 'Partial';
-        const membershipActive = ['Active', 'Partial'].includes(status);
+        const isPartial = document.getElementById('ver-status').dataset.hasDailyCredit === 'true';
+        const membershipActive = document.getElementById('ver-status').dataset.canCheckIn === 'true';
         const identityConfirmed = Boolean(memberId) && checks.every((checkbox) => checkbox.checked);
         const button = document.getElementById('btn-record-attendance');
         const banner = document.getElementById('ver-status-banner');
@@ -288,7 +288,9 @@
             ? (identityConfirmed ? 'Partial membership verified' : 'Partial membership · identity verification required')
             : (identityConfirmed ? 'Membership Verified' : 'Identity verification required');
         description.textContent = isPartial
-            ? `Available credit: ₱${Number(document.getElementById('ver-status').dataset.credit).toFixed(2)}. ₱50 is deducted each calendar day. ${identityConfirmed ? 'Identity confirmed; ready to record attendance.' : 'Confirm Photo, Name, and Birth Date before recording attendance.'}`
+            ? `${document.getElementById('ver-status').dataset.creditIsPaused === 'true'
+                ? `Credit is held through ${document.getElementById('ver-status').dataset.creditPausedUntil}. `
+                : '₱50 is deducted each calendar day. '}${identityConfirmed ? 'Identity confirmed; ready to record attendance.' : 'Confirm Photo, Name, and Birth Date before recording attendance.'}`
             : identityConfirmed
                 ? 'Identity confirmed: Photo, Name, and Birth Date match. Ready to record attendance.'
                 : 'Confirm Photo, Name, and Birth Date before recording attendance.';
@@ -439,10 +441,16 @@
             document.getElementById('ver-type').textContent = data.membership_type;
             document.getElementById('ver-status').textContent = data.status;
             document.getElementById('ver-status').dataset.status = data.status;
+            document.getElementById('ver-status').dataset.canCheckIn = data.can_check_in ? 'true' : 'false';
             document.getElementById('ver-status').dataset.credit = data.available_credit ?? 0;
-            document.getElementById('ver-status').className = data.status === 'Active'
-                ? 'font-bold text-emerald-700'
-                : (data.status === 'Partial' ? 'font-bold text-amber-700' : 'font-bold text-red-600');
+            document.getElementById('ver-status').dataset.creditIsPaused = data.credit_is_paused ? 'true' : 'false';
+            document.getElementById('ver-status').dataset.creditPausedUntil = data.credit_paused_until ?? '';
+            document.getElementById('ver-status').dataset.hasDailyCredit = data.has_daily_credit ? 'true' : 'false';
+            document.getElementById('ver-status').className = data.status === 'Expired'
+                ? 'font-bold text-red-600'
+                : data.status === 'Partial'
+                    ? 'font-bold text-amber-700'
+                    : 'font-bold text-emerald-700';
             document.getElementById('ver-start').textContent = data.start_date;
             document.getElementById('ver-expires').textContent = data.expiration_date;
             document.getElementById('ver-remaining').textContent = data.days_remaining + ' Days';

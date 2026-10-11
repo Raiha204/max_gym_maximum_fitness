@@ -241,9 +241,12 @@
         document.getElementById('ver-status').textContent = data.status;
         document.getElementById('ver-status').dataset.status = data.status;
         document.getElementById('ver-status').dataset.credit = data.available_credit ?? 0;
-        document.getElementById('ver-status').className = data.status === 'Active'
-            ? 'font-bold text-emerald-700'
-            : (data.status === 'Partial' ? 'font-bold text-amber-700' : 'font-bold text-red-600');
+        document.getElementById('ver-status').dataset.hasDailyCredit = data.has_daily_credit ? 'true' : 'false';
+        document.getElementById('ver-status').className = data.status === 'Expired'
+            ? 'font-bold text-red-600'
+            : data.status === 'Partial'
+                ? 'font-bold text-amber-700'
+                : 'font-bold text-emerald-700';
         document.getElementById('ver-start').textContent = data.start_date;
         document.getElementById('ver-expires').textContent = data.expiration_date;
         document.getElementById('ver-remaining').textContent = data.days_remaining + ' Days';
@@ -272,7 +275,7 @@
             }
             resetVerificationCard();
         } else if (data.can_check_in) {
-            const isPartial = data.status === 'Partial';
+            const isPartial = data.has_daily_credit;
             banner.className = isPartial
                 ? 'rounded-lg border border-[#E9D5A8] bg-[#FBF7E8] p-3.5 text-[#7A6238]'
                 : 'rounded-lg border border-[#C8DCCB] bg-[#F1F6F2] p-3.5 text-[#365E42]';
@@ -282,7 +285,9 @@
             icon.textContent = isPartial ? '!' : '✓';
             title.textContent = isPartial ? 'Partial membership' : 'Member has been verified';
             description.textContent = isPartial
-                ? `Available credit: ₱${Number(data.available_credit).toFixed(2)}. ₱50 will be deducted each calendar day. Ready to record check-in.`
+                ? `${data.credit_is_paused
+                    ? `Available credit: ₱${Number(data.available_credit).toFixed(2)}. Credit is held through ${data.credit_paused_until}. `
+                    : `Available credit: ₱${Number(data.available_credit).toFixed(2)}. ₱50 will be deducted each calendar day. `}Ready to record check-in.`
                 : 'Active membership confirmed. Ready to record check-in.';
             btn.disabled = false;
         } else {

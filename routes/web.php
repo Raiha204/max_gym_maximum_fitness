@@ -20,6 +20,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Members & Prepaid Memberships (5-Step Wizard + Digital QR Card + Renewals)
+    Route::get('/memberships/search', [MembershipController::class, 'search'])->name('memberships.search');
     Route::resource('memberships', MembershipController::class);
     Route::get('/memberships/{membership}/photo', [MembershipController::class, 'photo'])->name('memberships.photo');
     Route::post('/memberships/{membership}/renew', [MembershipController::class, 'renew'])->name('memberships.renew');
@@ -36,12 +37,15 @@ Route::middleware('auth')->group(function () {
     Route::post('/walk-ins', [WalkInController::class, 'store'])->name('walk-ins.store');
 
     // Revenue Reports
+    Route::get('/payments', [PaymentController::class, 'index'])->name('payments.index');
+    Route::get('/reports/search', [PaymentController::class, 'searchRevenue'])->name('reports.search');
     Route::get('/reports', [PaymentController::class, 'reports'])->name('reports.index');
 
     // Equipment & Maintenance
     Route::resource('equipment', EquipmentController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::get('/maintenance', [MaintenanceController::class, 'index'])->name('maintenance.index');
     Route::post('/maintenance', [MaintenanceController::class, 'store'])->name('maintenance.store');
+    Route::put('/maintenance/{maintenance}', [MaintenanceController::class, 'update'])->name('maintenance.update');
     Route::patch('/maintenance/{maintenance}/status', [MaintenanceController::class, 'updateStatus'])->name('maintenance.status');
     Route::patch('/maintenance/{maintenance}/resolve', [MaintenanceController::class, 'resolve'])->name('maintenance.resolve');
     Route::delete('/maintenance/{maintenance}', [MaintenanceController::class, 'destroy'])->name('maintenance.destroy');

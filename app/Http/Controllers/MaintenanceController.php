@@ -50,6 +50,18 @@ class MaintenanceController extends Controller
         return back()->with('popup', ['title' => 'Report Submitted', 'message' => 'Added Successfully!', 'sub' => 'The maintenance report has been logged.']);
     }
 
+    public function update(Request $request, Maintenance $maintenance)
+    {
+        $validated = $request->validate([
+            'equipment_name' => ['required', 'string', 'max:255'],
+            'issue' => ['required', 'string', 'max:500'],
+        ]);
+
+        $maintenance->update($validated);
+
+        return back()->with('success', 'Maintenance report updated.');
+    }
+
     public function updateStatus(Request $request, Maintenance $maintenance)
     {
         $validated = $request->validate([

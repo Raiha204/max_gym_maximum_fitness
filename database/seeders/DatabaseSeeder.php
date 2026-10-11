@@ -17,17 +17,17 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        User::updateOrCreate(
+        User::firstOrCreate(
             ['email' => 'admin@maxgym.test'],
             ['name' => 'MAX Gym Admin', 'password' => Hash::make('password'), 'role' => 'admin']
         );
 
-        User::updateOrCreate(
+        User::firstOrCreate(
             ['email' => 'cashier@maxgym.test'],
             ['name' => 'MAX Gym Cashier', 'password' => Hash::make('password'), 'role' => 'cashier']
         );
 
-        $carl = Membership::updateOrCreate(
+        $carl = Membership::firstOrCreate(
             ['member_id' => '622884'],
             [
                 'full_name' => 'Carl Adrian G. Gilbuena',
@@ -46,7 +46,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        $sophia = Membership::updateOrCreate(
+        $sophia = Membership::firstOrCreate(
             ['member_id' => '419205'],
             [
                 'full_name' => 'Sophia Marie L. Reyes',
@@ -65,7 +65,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        $marco = Membership::updateOrCreate(
+        $marco = Membership::firstOrCreate(
             ['member_id' => '583921'],
             [
                 'full_name' => 'Marco Antonio D. Santos',
@@ -85,7 +85,7 @@ class DatabaseSeeder extends Seeder
         );
 
         // Payments (Today & September 27, 2026)
-        Payment::updateOrCreate(
+        Payment::firstOrCreate(
             ['membership_id' => $carl->id, 'category' => 'Membership Registration'],
             [
                 'payer_name' => $carl->full_name,
@@ -96,7 +96,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        Payment::updateOrCreate(
+        Payment::firstOrCreate(
             ['membership_id' => $sophia->id, 'category' => 'Membership Registration'],
             [
                 'payer_name' => $sophia->full_name,
@@ -108,7 +108,7 @@ class DatabaseSeeder extends Seeder
         );
 
         // Walk-Ins (Today & September 27, 2026)
-        WalkIn::updateOrCreate(
+        WalkIn::firstOrCreate(
             ['receipt_no' => 'WI-2026-201'],
             [
                 'session_type' => 'Regular Walk-In',
@@ -118,7 +118,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        WalkIn::updateOrCreate(
+        WalkIn::firstOrCreate(
             ['receipt_no' => 'WI-2026-202'],
             [
                 'session_type' => 'Student Walk-In',
@@ -128,7 +128,7 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        WalkIn::updateOrCreate(
+        WalkIn::firstOrCreate(
             ['receipt_no' => 'WI-2026-203'],
             [
                 'session_type' => 'Regular Walk-In',
@@ -146,32 +146,32 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        $treadmill = Equipment::updateOrCreate(
+        $treadmill = Equipment::firstOrCreate(
             ['name' => 'Commercial Motorized Treadmill #1'],
             ['category' => 'Cardio', 'status' => 'Operational', 'last_inspected' => today()]
         );
 
-        $latPulldown = Equipment::updateOrCreate(
+        $latPulldown = Equipment::firstOrCreate(
             ['name' => 'Lat Pulldown & Seated Row Station'],
             ['category' => 'Strength Machines', 'status' => 'Under Maintenance', 'last_inspected' => today()]
         );
 
-        Equipment::updateOrCreate(
+        Equipment::firstOrCreate(
             ['name' => 'Olympic Hex Dumbbell Rack (5–100 lbs)'],
             ['category' => 'Free Weights', 'status' => 'Operational', 'last_inspected' => today()]
         );
 
-        Equipment::updateOrCreate(
+        Equipment::firstOrCreate(
             ['name' => 'Olympic Power Squat Cage #1'],
             ['category' => 'Benches & Racks', 'status' => 'Operational', 'last_inspected' => today()]
         );
 
-        Equipment::updateOrCreate(
+        Equipment::firstOrCreate(
             ['name' => 'Battle Ropes & Kettlebell Station'],
             ['category' => 'Functional & Accessories', 'status' => 'Operational', 'last_inspected' => today()]
         );
 
-        Maintenance::updateOrCreate(
+        Maintenance::firstOrCreate(
             ['equipment_id' => $latPulldown->id, 'issue' => 'Primary pulley cable fraying near top weight stack'],
             [
                 'equipment_name' => $latPulldown->name,

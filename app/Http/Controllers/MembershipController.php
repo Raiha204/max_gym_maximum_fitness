@@ -21,10 +21,17 @@ class MembershipController extends Controller
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
-                $q->where('full_name', 'like', "%{$search}%")
-                  ->orWhere('member_id', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%")
-                  ->orWhere('phone', 'like', "%{$search}%");
+                $q->where('member_id', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%");
+                $terms = $this->searchTerms($search);
+                if ($terms !== []) {
+                    $q->orWhere(function ($nameQuery) use ($terms) {
+                        foreach ($terms as $term) {
+                            $nameQuery->where('full_name', 'like', "%{$term}%");
+                        }
+                    });
+                }
             });
         }
 
@@ -33,14 +40,14 @@ class MembershipController extends Controller
         $counts = [
             'all' => $allMemberships->count(),
             'active' => $allMemberships->where('membership_status', 'Active')->count(),
-            'partial' => $allMemberships->where('membership_status', 'Partial')->count(),
+            'partial' => $allMemberships->where('daily_credit_enabled', true)->count(),
             'expiring' => $allMemberships->where('display_status', 'expiring')->count(),
             'expired' => $allMemberships->where('membership_status', 'Expired')->count(),
         ];
 
         $memberships = $allMemberships->filter(function (Membership $m) use ($statusFilter) {
             if ($statusFilter === 'active') return $m->membership_status === 'Active';
-            if ($statusFilter === 'partial') return $m->membership_status === 'Partial';
+            if ($statusFilter === 'partial') return (bool) $m->daily_credit_enabled;
             if ($statusFilter === 'expiring') return $m->display_status === 'expiring';
             if ($statusFilter === 'expired') return $m->membership_status === 'Expired';
             return true;
@@ -53,6 +60,46 @@ class MembershipController extends Controller
 
         return view('memberships.index', compact('memberships', 'search', 'statusFilter', 'counts'));
     }
+
+    public function search(Request $request)
+    {
+        $search = trim((string) $request->query('q', ''));
+        if ($search === '') {
+            return response()->json(['members' => []]);
+        }
+
+        $members = Membership::query()
+            ->where(function ($q) use ($search) {
+                $q->where('member_id', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('phone', 'like', "%{$search}%");
+                $terms = $this->searchTerms($search);
+                if ($terms !== []) {
+                    $q->orWhere(function ($nameQuery) use ($terms) {
+                        foreach ($terms as $term) {
+                            $nameQuery->where('full_name', 'like', "%{$term}%");
+                        }
+                    });
+                }
+            })
+            ->orderBy('full_name')
+            ->limit(10)
+            ->get()
+            ->map(fn (Membership $member) => [
+                'member_id' => $member->member_id,
+                'full_name' => $member->full_name,
+                'membership_type' => $member->plan_type,
+                'status' => $member->membership_status,
+            ]);
+
+        return response()->json(['members' => $members]);
+    }
+
+    private function searchTerms(string $search): array
+    {
+        return preg_split('/[^\pL\pN]+/u', mb_strtolower($search), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+    }
+
 
     public function create()
     {
@@ -123,7 +170,7 @@ class MembershipController extends Controller
             Payment::create([
                 'membership_id' => $member->id,
                 'payer_name' => $member->full_name,
-                'category' => 'Membership Registration',
+                'category' => $isPartialPayment ? 'Partial Payment' : 'Membership Registration',
                 'plan_label' => "{$member->plan_type} ({$duration} " . ($duration === 1 ? 'Month' : 'Months') . ")",
                 'amount' => $amountPaid,
                 'payment_method' => $validated['payment_method'],
@@ -212,8 +259,14 @@ class MembershipController extends Controller
             : Carbon::today();
 
         $newEndDate = $baseDate->copy()->addMonths($duration);
+        $creditPausedUntil = $membership->daily_credit_paused_until;
+        if ($isPartialPayment && $membership->end_date && $membership->end_date->isFuture()) {
+            if (!$creditPausedUntil || $membership->end_date->gt($creditPausedUntil)) {
+                $creditPausedUntil = $membership->end_date;
+            }
+        }
 
-        DB::transaction(function () use ($membership, $validated, $monthlyRate, $duration, $totalAmount, $amountPaid, $newEndDate, $paidAt, $isPartialPayment) {
+        DB::transaction(function () use ($membership, $validated, $monthlyRate, $duration, $totalAmount, $amountPaid, $newEndDate, $paidAt, $isPartialPayment, $creditPausedUntil) {
             $enableDailyCredit = $membership->daily_credit_enabled || $isPartialPayment;
             $membership->update([
                 'plan_type' => $validated['plan_type'],
@@ -223,6 +276,7 @@ class MembershipController extends Controller
                 'remaining_amount' => $totalAmount - $amountPaid,
                 'daily_credit_enabled' => $enableDailyCredit,
                 'daily_credit_started_at' => $membership->daily_credit_started_at ?? ($isPartialPayment ? $paidAt : null),
+                'daily_credit_paused_until' => $creditPausedUntil,
                 'payment_method' => $validated['payment_method'],
                 'start_date' => $membership->end_date && $membership->end_date->isFuture() ? $membership->start_date : Carbon::today(),
                 'end_date' => $newEndDate,

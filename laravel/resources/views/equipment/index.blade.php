@@ -32,7 +32,7 @@
             <h2 class="text-[12px] font-bold text-[#111111]">Add New Equipment</h2>
             <button type="button" onclick="document.getElementById('equipment-form').classList.add('hidden')" class="text-[10px] font-semibold text-neutral-500">Close</button>
         </div>
-        <form method="POST" action="{{ route('equipment.store') }}" class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+        <form method="POST" action="{{ route('equipment.store') }}" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-end">
             @csrf
             <div>
                 <label class="block text-xs font-semibold text-[#111111] mb-1">Category</label>
@@ -45,6 +45,10 @@
             <div>
                 <label class="block text-xs font-semibold text-[#111111] mb-1">Equipment Name *</label>
                 <input type="text" name="name" placeholder="e.g. Commercial Treadmill #2" required class="w-full px-3 py-2 text-xs rounded-lg border border-[#D1D5DB]">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-[#111111] mb-1">Description</label>
+                <input type="text" name="notes" maxlength="1000" placeholder="Optional equipment details" class="w-full px-3 py-2 text-xs rounded-lg border border-[#D1D5DB]">
             </div>
             <div>
                 <label class="block text-xs font-semibold text-[#111111] mb-1">Status</label>
@@ -62,7 +66,7 @@
 
     <section class="bg-white rounded-xl border border-[#E5E7EB] p-3.5 shadow-sm">
         <div class="flex flex-col xl:flex-row gap-3 pb-3 border-b border-[#E5E7EB]">
-            <input id="equipment-search" type="search" oninput="applyEquipmentFilters()" placeholder="Search equipment by name or category..." class="flex-1 px-3 py-2 text-[10px] rounded-lg border border-[#D1D5DB]">
+            <input id="equipment-search" type="search" aria-label="Search equipment list" oninput="applyEquipmentFilters()" placeholder="Search equipment by name, category, description, or ID..." class="flex-1 px-3 py-2 text-[10px] rounded-lg border border-[#D1D5DB]">
             <div class="flex flex-wrap gap-1.5" role="group" aria-label="Filter by status">
                 @foreach(['All', 'Operational', 'Under Maintenance', 'Out of Order'] as $status)
                     <button type="button" data-equipment-filter="{{ $status === 'All' ? 'all' : 'status:' . $status }}" onclick="applyEquipmentFilters('{{ $status === 'All' ? 'all' : 'status:' . $status }}')" class="equipment-filter px-2.5 py-1.5 text-[9px] font-semibold rounded-lg border border-[#D1D5DB] {{ $status === 'All' ? 'bg-[#111111] text-white' : 'bg-white text-[#111111]' }}">{{ $status }}</button>
@@ -82,12 +86,32 @@
                     </div>
                     <div class="p-2 space-y-1.5">
                 @forelse($equipment->where('category', $category) as $eq)
-                    <div class="equipment-item p-2.5 rounded-lg border border-[#E5E7EB] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10px]" data-name="{{ strtolower($eq->name) }}" data-category="{{ $eq->category }}" data-status="{{ $eq->status }}">
+                    <div class="equipment-item p-2.5 rounded-lg border border-[#E5E7EB] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[10px]" data-name="{{ strtolower($eq->name) }}" data-search="{{ strtolower($eq->name . ' ' . $eq->category . ' ' . ($eq->notes ?? '') . ' ' . $eq->id . ' ' . $eq->status) }}" data-category="{{ $eq->category }}" data-status="{{ $eq->status }}">
                         <div>
                             <span class="font-bold text-[#111111]">{{ $eq->name }}</span>
+                            <span class="block text-[9px] text-[#6B7280] font-mono mt-0.5">ID #{{ $eq->id }}</span>
+                            @if($eq->notes)
+                                <span class="block text-[#6B7280] mt-0.5">{{ $eq->notes }}</span>
+                            @endif
                             <span class="block text-[#6B7280] mt-0.5">{{ $eq->status }}</span>
                         </div>
                         <div class="flex items-center gap-2">
+                            <details class="relative">
+                                <summary class="inline-flex h-10 w-[60px] cursor-pointer list-none items-center justify-center rounded-lg border border-[#D1D5DB] bg-white px-2 text-xs font-semibold text-[#111111]">Edit</summary>
+                                <form method="POST" action="{{ route('equipment.update', $eq) }}" class="absolute right-0 z-20 mt-2 w-72 space-y-2 rounded-lg border border-[#E5E7EB] bg-white p-3 shadow-xl">
+                                    @csrf
+                                    @method('PUT')
+                                    <div>
+                                        <label class="block font-semibold text-[#111111] mb-1">Equipment Name</label>
+                                        <input type="text" name="name" value="{{ $eq->name }}" required maxlength="255" class="w-full px-2.5 py-2 rounded border border-[#D1D5DB]">
+                                    </div>
+                                    <div>
+                                        <label class="block font-semibold text-[#111111] mb-1">Description</label>
+                                        <textarea name="notes" rows="3" maxlength="1000" class="w-full px-2.5 py-2 rounded border border-[#D1D5DB]">{{ $eq->notes }}</textarea>
+                                    </div>
+                                    <button type="submit" class="w-full px-3 py-2 rounded bg-[#E31B23] text-white font-semibold">Save Changes</button>
+                                </form>
+                            </details>
                             <form method="POST" action="{{ route('equipment.update', $eq) }}" class="flex items-center gap-1.5">
                                 @csrf
                                 @method('PUT')
@@ -100,7 +124,7 @@
                             <form method="POST" action="{{ route('equipment.destroy', $eq) }}">
                                 @csrf
                                 @method('DELETE')
-                                <button type="button" data-equipment-name="{{ $eq->name }}" onclick="openEquipmentDeleteConfirmation(this)" class="px-2.5 py-1 rounded bg-[#FEE2E2] text-[#B91C1C] font-semibold">Delete</button>
+                                <button type="button" data-equipment-name="{{ $eq->name }}" onclick="openEquipmentDeleteConfirmation(this)" class="inline-flex h-10 w-[60px] items-center justify-center rounded-lg border border-[#FECACA] bg-[#FEE2E2] px-2 text-xs font-semibold text-[#B91C1C]">Delete</button>
                             </form>
                         </div>
                     </div>
@@ -189,7 +213,7 @@
         let visibleCount = 0;
 
         document.querySelectorAll('.equipment-item').forEach((item) => {
-            const matchesSearch = `${item.dataset.name} ${item.dataset.category.toLowerCase()}`.includes(search);
+            const matchesSearch = item.dataset.search.includes(search);
             const matchesFilter = filter === 'all'
                 || (filter.startsWith('status:') && item.dataset.status === filter.slice(7))
                 || (filter.startsWith('category:') && item.dataset.category === filter.slice(9));

@@ -50,6 +50,18 @@ class MaintenanceController extends Controller
         return back()->with('success', 'Equipment maintenance report logged.');
     }
 
+    public function update(Request $request, Maintenance $maintenance)
+    {
+        $validated = $request->validate([
+            'equipment_name' => ['required', 'string', 'max:255'],
+            'issue' => ['required', 'string', 'max:500'],
+        ]);
+
+        $maintenance->update($validated);
+
+        return back()->with('success', 'Maintenance report updated.');
+    }
+
     public function updateStatus(Request $request, Maintenance $maintenance)
     {
         $validated = $request->validate([
@@ -62,9 +74,7 @@ class MaintenanceController extends Controller
         ]);
 
         if ($maintenance->equipment) {
-            $maintenance->equipment->update([
-                'status' => $validated['status'] === 'Resolved' ? 'Operational' : 'Under Maintenance',
-            ]);
+            $this->syncEquipmentStatus($maintenance->equipment);
         }
 
         return back()->with('success', 'Maintenance status updated.');
@@ -78,7 +88,7 @@ class MaintenanceController extends Controller
         ]);
 
         if ($maintenance->equipment) {
-            $maintenance->equipment->update(['status' => 'Operational']);
+            $this->syncEquipmentStatus($maintenance->equipment);
         }
 
         return back()->with('success', 'Maintenance issue resolved.');
@@ -86,7 +96,24 @@ class MaintenanceController extends Controller
 
     public function destroy(Maintenance $maintenance)
     {
+        $equipment = $maintenance->equipment;
         $maintenance->delete();
+
+        if ($equipment) {
+            $this->syncEquipmentStatus($equipment);
+        }
+
         return back()->with('success', 'Maintenance report deleted.');
+    }
+
+    private function syncEquipmentStatus(Equipment $equipment): void
+    {
+        $hasOpenMaintenance = Maintenance::where('equipment_id', $equipment->id)
+            ->where('status', '!=', 'Resolved')
+            ->exists();
+
+        $equipment->update([
+            'status' => $hasOpenMaintenance ? 'Under Maintenance' : 'Operational',
+        ]);
     }
 }
